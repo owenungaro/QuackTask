@@ -1,0 +1,29 @@
+{
+    "manifest_version": 3,
+    "name": "QuackTask",
+    "version": "1.0",
+    "description": "A chrome extension that takes your Canvas tasks and uploads them into Google Tasks.",
+    "permissions": ["scripting", "activeTab", "storage"],
+    "host_permissions": [
+        "https://sit.instructure.com/*"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
+
+    "action": {
+        "default_popup": "popup.html"
+    },
+    "content_scripts": [
+        {
+            "matches": ["https://sit.instructure.com/*"],
+            "js": ["content.js"]
+        }
+    ],
+    "web_accessible_resources": [
+        {
+            "resources": ["google-api.js"],
+            "matches": ["<all_urls>"]
+        }
+    ]
+}
