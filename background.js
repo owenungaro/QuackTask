@@ -1,7 +1,7 @@
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if(message.type === "STORE_SCRAPED_DATA") {
         chrome.storage.local.set({ scrapedData: message.data }, () => {
-            console.log("✅ Scraped data stored in chrome storage:", message.data);
+            console.log("Scraped data stored in Chrome storage:", message.data);
         });
     }
 
