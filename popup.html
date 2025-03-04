@@ -1,31 +1,19 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QuackTask</title>
     <style>
         body {
             font-family: Arial, sans-serif;
             margin: 10px;
+            text-align: center;
         }
-        h1 {
-            font-size: 18px;
+        .screen {
+            display: none;
         }
-        ul {
-            padding: 0;
-            list-style: none;
-        }
-        li {
-            margin: 5px 0;
-            padding: 5px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            background-color: #f9f9f9;
-        }
-        li a {
-            color: #007bff;
-            text-decoration: none;
-        }
-        button {
+        button, select {
             padding: 10px 15px;
             margin-top: 10px;
             background-color: #007bff;
@@ -37,14 +25,70 @@
         button:hover {
             background-color: #0056b3;
         }
-    </style>
+        select {
+            width: 80%;
+            margin: 10px;
+        }
+        .assignment-container {
+            max-width: 400px;
+            margin: 0 auto;
+            text-align: left;
+        }
+        .assignment-card {
+            display: flex;
+            align-items: center;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 10px;
+            background-color: #f9f9f9;
+        }
+        .assignment-checkbox {
+            margin-right: 10px;
+        }
+        .assignment-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        .assignment-course {
+            font-size: 14px;
+            color: #007bff;
+            font-weight: bold;
+        }
+        .assignment-date {
+            font-size: 13px;
+            color: #666;
+        }
+    </style>    
 </head>
 <body>
-    <h1>Assignments</h1>
-    <div id="output">Loading assignments...</div>
-    <button id="sendTasks">Send to Google Tasks</button>
-    <script src="google-api.js"></script>
+    <!--login screen-->
+    <div id="loginScreen" class="screen">
+        <h1>Login to QuackTask</h1>
+        <button id="login">Login with Google</button>
+    </div>
+
+    <!--main screen-->
+    <div id="mainScreen" class="screen">
+        <h1>Assignments</h1>
+        <p id="userInfo"></p>
+        <button id="goToSettings">Settings</button>
+
+        <select id="taskLists"></select>
+        <button id="sendTasks">Send to Google Tasks</button>
+
+        <div id="canvasOutput" class="assignment-container">Loading assignments...</div>
+    </div>
+
+    <!--settings screen-->
+    <div id="settingsScreen" class="screen">
+        <h1>Settings</h1>
+        <p>Settings go here...</p>
+        <button id="backToMain">Back</button>
+    </div>
+
     <script src="popup.js"></script>
-    <script src="tasks.js"></script>
 </body>
 </html>
