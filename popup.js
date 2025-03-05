@@ -68,7 +68,6 @@ document.addEventListener("DOMContentLoaded", () => {
         .then(res => {
             if(!res.ok) { //res.ok sees if token is valid
                 if(res.status === 401) { 
-                    console.warn("Token expired or invalid. Redirecting to login...");
                     localStorage.removeItem("access_token");
                     switchToLoginScreen();
                 }
@@ -108,7 +107,6 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
         if(!scrapedData || scrapedData.length === 0) {
-            console.warn("⚠ No scraped assignments found.");
             callback([]);
             return;
         }
@@ -169,10 +167,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function fetchAllTaskNames(callback) {
     fetchAllTasks((tasks) => {
-        const taskNames = tasks.map(task => task.title.trim()).filter(title => title); // Remove empty task titles
+        const taskNames = tasks
+            .filter(task => !task.deleted) // Ensure deleted tasks are ignored
+            .map(task => task.title.trim())
+            .filter(title => title); // Remove empty task titles
         callback(taskNames);
     });
   }
+
+  function refreshTaskList() { //not yet used
+    fetchAllTaskNames((existingTaskNames) => {
+        filterAssignments((uniqueTasks) => {
+            console.log("Filtered Assignments (Updated):", uniqueTasks);
+            displayAssignments(uniqueTasks);
+        });
+    });
+  }
+
 
   function displayAssignments(data) {
     const outputDiv = document.getElementById("canvasOutput");
@@ -181,21 +192,21 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
     }
 
-    outputDiv.innerHTML = data.map((item, index) => `
-        <div class="assignment-card">
-            <input type="checkbox" class="assignment-checkbox" data-index="${index}">
-            <p class="assignment-title">${item.assignment}</p>
-            <p class="assignment-course"><strong>Course:</strong> ${item.course}</p>
-            <p class="assignment-date">${item.dueDate ? `<strong>Due:</strong> ${item.dueDate}` : "<strong>Due:</strong> No Due Date"}</p>
-            <a href="${item.href}" target="_blank">${item.href ? "View Assignment" : "No Link Available"}</a>
-        </div>
+    outputDiv.innerHTML = data.map((item) => `
+      <div class="assignment-card">
+          <input type="checkbox" class="assignment-checkbox" data-title="${item.assignment}">
+          <p class="assignment-title">${item.assignment}</p>
+          <p class="assignment-course"><strong>Course:</strong> ${item.course}</p>
+          <p class="assignment-date">${item.dueDate ? `<strong>Due:</strong> ${item.dueDate}` : "<strong>Due:</strong> No Due Date"}</p>
+          <a href="${item.href}" target="_blank">${item.href ? "View Assignment" : "No Link Available"}</a>
+      </div>
     `).join(""); //assignment card information (very big IK)
   }
 
   function refreshAuthToken(callback) {
     chrome.identity.getAuthToken({ interactive: false }, (newToken) => {
         if(chrome.runtime.lastError || !newToken) {
-            console.warn("Failed to refresh token. Redirecting to login...");
+            console.log("Failed to refresh token. Redirecting to login.");
             localStorage.removeItem("access_token");
             switchToLoginScreen();
         } else {
@@ -248,7 +259,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     //filters checked assignments
-    const selectedAssignments = checkedIndexes.map(index => scrapedData[index]);
+    const selectedAssignments = [...document.querySelectorAll(".assignment-checkbox:checked")]
+    .map(checkbox => scrapedData.find(item => item.assignment === checkbox.dataset.title));
+
 
     selectedAssignments.forEach((item) => {
         const taskTitle = `${item.course} → ${item.assignment}`; //formats title
