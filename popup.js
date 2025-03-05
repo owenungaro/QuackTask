@@ -10,7 +10,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const backToMainButton = document.getElementById("backToMain");
 
   const taskListsDropdown = document.getElementById("taskLists");
-  let scrapedData = [];
+  let scrapedData = []; //formated as "title": x, "notes": y, "due": z
+  let filteredData = [] // ^
 
   loginScreen.style.display = "block"; //defaults user to login screen
 
@@ -59,7 +60,6 @@ document.addEventListener("DOMContentLoaded", () => {
     settingsScreen.style.display = "none";
   }
 
-
   function fetchUserInfo() {
     refreshAuthToken((token) => {
         fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
@@ -67,7 +67,7 @@ document.addEventListener("DOMContentLoaded", () => {
         })
         .then(res => {
             if(!res.ok) { //res.ok sees if token is valid
-                if (res.status === 401) { 
+                if(res.status === 401) { 
                     console.warn("Token expired or invalid. Redirecting to login...");
                     localStorage.removeItem("access_token");
                     switchToLoginScreen();
@@ -86,14 +86,92 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-
   function scrapeAssignments() {
-      chrome.runtime.sendMessage({type: "SCRAPE_ASSIGNMENTS"}); //sends message to background.js
+    chrome.runtime.sendMessage({ type: "SCRAPE_ASSIGNMENTS" });
+    chrome.runtime.sendMessage({ type: "GET_SCRAPED_DATA" }, (response) => {
+        scrapedData = response || [];
+        //displayAssignments(scrapedData);
+        filterAssignments((uniqueTasks) => {
+          console.log("test1");
+          console.log("unique", uniqueTasks);
+          displayAssignments(uniqueTasks);
+        });
+    });
+  }
 
-      chrome.runtime.sendMessage({ type: "GET_SCRAPED_DATA" }, (response) => { //sends message to background.js
-          scrapedData = response || [];
-          displayAssignments(scrapedData);
-      });
+  function filterAssignments(callback) {
+    console.log("🚀 Filtering assignments for all lists...");
+
+    fetchAllTaskNames((existingTaskNames) => {
+        if(!existingTaskNames || existingTaskNames.length === 0) {
+            callback(scrapedData);
+            return;
+        }
+        if(!scrapedData || scrapedData.length === 0) {
+            console.warn("⚠ No scraped assignments found.");
+            callback([]);
+            return;
+        }
+
+        //normalize task names for comparison
+        const formattedExistingTasks = new Set(existingTaskNames.map(task => (task ? task.toLowerCase().trim() : "")));
+
+        //set to `COURSE → ASSIGNMENT` format before filtering
+        filteredData = scrapedData.filter(item => {
+            if(!item.course || !item.assignment) return true; //keep if missing data
+
+            const formattedTaskName = `${item.course} → ${item.assignment}`.toLowerCase().trim();
+            return !formattedExistingTasks.has(formattedTaskName);
+        });
+
+        //console.log("Filtered Assignments (Not in Any Google Task List):", filteredData);
+        callback(filteredData);
+    });
+  }
+
+  function fetchAllTasks(callback) {
+    const token = localStorage.getItem("access_token");
+    if(!token) return callback([]);
+
+    fetch("https://tasks.googleapis.com/tasks/v1/users/@me/lists", { headers: { Authorization: `Bearer ${token}` } })
+    .then(res => res.json())
+    .then(data => {
+        if(!data.items) return callback([]);
+        
+        let allTasks = [];
+        let listsProcessed = 0;
+
+        data.items.forEach(list => {
+            fetchTasksFromList(list.id, (tasks) => {
+                allTasks = allTasks.concat(tasks);
+                if(++listsProcessed === data.items.length) callback(allTasks);
+            });
+        });
+    })
+    .catch(() => callback([]));
+  }
+
+  function fetchTasksFromList(taskListId, callback, pageToken = null, allTasks = []) {
+      const token = localStorage.getItem("access_token");
+      if(!token) return callback([]);
+
+      let url = `https://tasks.googleapis.com/tasks/v1/lists/${taskListId}/tasks?showCompleted=true&showHidden=true&maxResults=100`;
+      if(pageToken) url += `&pageToken=${pageToken}`;
+
+      fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => res.json())
+      .then(data => {
+          if(data.items) allTasks = allTasks.concat(data.items);
+          data.nextPageToken ? fetchTasksFromList(taskListId, callback, data.nextPageToken, allTasks) : callback(allTasks);
+      })
+      .catch(() => callback(allTasks));
+  }
+
+  function fetchAllTaskNames(callback) {
+    fetchAllTasks((tasks) => {
+        const taskNames = tasks.map(task => task.title.trim()).filter(title => title); // Remove empty task titles
+        callback(taskNames);
+    });
   }
 
   function displayAssignments(data) {
@@ -123,11 +201,10 @@ document.addEventListener("DOMContentLoaded", () => {
         } else {
             console.log("Token refreshed:", newToken);
             localStorage.setItem("access_token", newToken);
-            if (callback) callback(newToken);
+            if(callback) callback(newToken);
         }
     });
   }
-
 
   function fetchTaskLists() { //adds different task lists to choose from
       const token = localStorage.getItem("access_token");
@@ -159,7 +236,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const token = localStorage.getItem("access_token");
-    if (!token) return; //base case
+    if(!token) return; //base case
 
     //gets all checked boxes
     const checkedIndexes = [...document.querySelectorAll(".assignment-checkbox:checked")]
@@ -209,20 +286,18 @@ document.addEventListener("DOMContentLoaded", () => {
     alert("Selected tasks sent to Google Tasks!");
   });
 
-
   function parseCanvasDate(canvasDate) {
-    if (!canvasDate || canvasDate.toLowerCase() === "no due date") {
+    if(!canvasDate || canvasDate.toLowerCase() === "no due date") {
         return null; //returns null if no valid date
     }
-
     //hands date formats (MM/YY)
     const dateParts = canvasDate.split("/");
-    if (dateParts.length === 2 || dateParts.length === 3) {
+    if(dateParts.length === 2 || dateParts.length === 3) {
         let month = parseInt(dateParts[0], 10) - 1; //0-11 inclusive
         let day = parseInt(dateParts[1], 10);
         let year = new Date().getFullYear(); //defaults to current year
 
-        if (dateParts.length === 3) {
+        if(dateParts.length === 3) {
             year = parseInt(dateParts[2], 10); //uses year
         }
 
@@ -251,7 +326,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     console.log(`Could not parse date: ${canvasDate}`);
     return null;
-}
+  }
 
   goToSettingsButton.addEventListener("click", () => {
       mainScreen.style.display = "none";
@@ -262,4 +337,10 @@ document.addEventListener("DOMContentLoaded", () => {
       settingsScreen.style.display = "none";
       mainScreen.style.display = "block";
   });
+
+  function testFetchTasksFromList(taskListId) {
+    fetchTasksFromList(taskListId, (tasks) => {
+        console.log(`Tasks from List (${taskListId}):`, tasks);
+    });
+  }
 });
