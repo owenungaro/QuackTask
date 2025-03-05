@@ -8,6 +8,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const sendTasksButton = document.getElementById("sendTasks");
   const goToSettingsButton = document.getElementById("goToSettings");
   const backToMainButton = document.getElementById("backToMain");
+  const logoutButton = document.getElementById("logoutButton");
 
   const taskListsDropdown = document.getElementById("taskLists");
   let scrapedData = []; //formated as "title": x, "notes": y, "due": z
@@ -129,25 +130,37 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function fetchAllTasks(callback) {
     const token = localStorage.getItem("access_token");
-    if(!token) return callback([]);
+    if (!token) {
+        return callback([]);
+    }
 
     fetch("https://tasks.googleapis.com/tasks/v1/users/@me/lists", { headers: { Authorization: `Bearer ${token}` } })
     .then(res => res.json())
     .then(data => {
-        if(!data.items) return callback([]);
+        if (!data.items || !Array.isArray(data.items)) {
+            return callback([]);
+        }
         
         let allTasks = [];
         let listsProcessed = 0;
 
         data.items.forEach(list => {
             fetchTasksFromList(list.id, (tasks) => {
-                allTasks = allTasks.concat(tasks);
-                if(++listsProcessed === data.items.length) callback(allTasks);
+                if (tasks) {
+                    allTasks = allTasks.concat(tasks);
+                }
+
+                if (++listsProcessed === data.items.length) {
+                    callback(allTasks);
+                }
             });
         });
     })
-    .catch(() => callback([]));
+    .catch((error) => {
+        callback([]);
+    });
   }
+
 
   function fetchTasksFromList(taskListId, callback, pageToken = null, allTasks = []) {
       const token = localStorage.getItem("access_token");
@@ -167,13 +180,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function fetchAllTaskNames(callback) {
     fetchAllTasks((tasks) => {
+        if (!tasks || !Array.isArray(tasks)) {
+            return callback([]);  // Ensure no undefined errors
+        }
+
         const taskNames = tasks
-            .filter(task => !task.deleted) // Ensure deleted tasks are ignored
-            .map(task => task.title.trim())
+            .map(task => task.title?.trim()) // Use optional chaining `?.`
             .filter(title => title); // Remove empty task titles
+
+        console.log("Updated Task Names from Google:", taskNames);
         callback(taskNames);
     });
   }
+
 
   function refreshTaskList() { //not yet used
     fetchAllTaskNames((existingTaskNames) => {
@@ -355,5 +374,40 @@ document.addEventListener("DOMContentLoaded", () => {
     fetchTasksFromList(taskListId, (tasks) => {
         console.log(`Tasks from List (${taskListId}):`, tasks);
     });
+  }
+
+  logoutButton.addEventListener("click", () => {
+    logoutUser();
+  });
+
+  function logoutUser() {
+    console.log("Logging out user...");
+
+    chrome.identity.getAuthToken({ interactive: false }, (token) => {
+        if (chrome.runtime.lastError) {
+            console.warn("No valid token found, redirecting to login...");
+            finishLogout();
+            return;
+        }
+
+        chrome.identity.removeCachedAuthToken({ token }, () => {
+            console.log("Token removed from cache.");
+
+            fetch(`https://accounts.google.com/o/oauth2/revoke?token=${token}`)
+                .then(() => {
+                    console.log("Google OAuth token revoked.");
+                    finishLogout();
+                })
+                .catch(() => {
+                    console.warn("Failed to revoke token, but logging out anyway.");
+                    finishLogout();
+                });
+        });
+    });
+  }
+
+  function finishLogout() {
+      localStorage.removeItem("access_token"); // Remove stored token
+      switchToLoginScreen();
   }
 });
