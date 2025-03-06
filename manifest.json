@@ -14,6 +14,14 @@
     "action": {
         "default_popup": "popup.html"
     },
+   "web_accessible_resources": [
+        {
+            "resources": ["popup.js", "auth.js", "assignments.js", "ui.js"],
+            "matches": ["<all_urls>"]
+        }
+    ],
+
+
     "content_scripts": [
         {
             "matches": ["https://sit.instructure.com/*"],

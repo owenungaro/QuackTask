@@ -1,12 +1,13 @@
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if(message.type === "STORE_SCRAPED_DATA") {
-        chrome.storage.local.set({scrapedData: message.data}, () => {
-            console.log("Scraped data stored in Chrome storage:", message.data);
+        chrome.storage.local.set({ scrapedData: message.data }, () => {
+            // console.log("Scraped data successfully stored in Chrome storage:", message.data);
         });
     }
 
     if(message.type === "GET_SCRAPED_DATA") {
         chrome.storage.local.get(["scrapedData"], (result) => {
+            // console.log("Retrieved scraped data from storage:", result.scrapedData);
             sendResponse(result.scrapedData || []);
         });
         return true;
@@ -23,7 +24,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                     files: ["content.js"]
                 });
             } else {
-                console.log("SCRAPE_ASSIGNMENTS attempted on an invalid page:", tab ? tab.url : "No active tab");
+                // console.log("SCRAPE_ASSIGNMENTS attempted on an invalid page:", tab ? tab.url : "No active tab");
             }
         });
     }
@@ -35,7 +36,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 sendResponse({success: false, error: chrome.runtime.lastError});
                 return;
             }
-            console.log("Token:", token);
+            // console.log("Token:", token);
             sendResponse({success: true, token})
         });
         return true;

@@ -10,7 +10,7 @@
             let ariaLabel = card.getAttribute("aria-label") || "Unknown Course"; //Gets the course name, defaults to unknown
 
             const words = ariaLabel.split(" ");
-            let courseName = "unknownCourse";
+            let courseName= "unknownCourse";
             if(words.length >= 3) {
                 const secondWord = words[1]; //course name
                 let thirdWord = words[2]; //course number
