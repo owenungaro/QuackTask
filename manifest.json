@@ -15,6 +15,13 @@
         "default_popup": "popup.html",
         "default_width": 260,
         "default_height": 320
+
+    },
+    "icons": {
+        "16": "images/quacktasklogo_16x.png",
+        "32": "images/quacktasklogo_32x.png",
+        "48": "images/quacktasklogo_48x.png",
+        "128": "images/quacktasklogo_128x.png"
     },
    "web_accessible_resources": [
         {
