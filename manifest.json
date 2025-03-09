@@ -2,7 +2,7 @@
     "manifest_version": 3,
     "name": "QuackTask",
     "version": "1.0",
-    "description": "A Chrome extension that takes your Canvas tasks and uploads them into Google Tasks.",
+    "description": "Sync your Canvas tasks with Google Tasks to stay organized and on top of your assignments effortlessly.",
     "permissions": ["scripting", "activeTab", "storage", "identity"],
     "host_permissions": [
         "https://sit.instructure.com/*",
