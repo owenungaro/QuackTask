@@ -7,22 +7,46 @@ function switchScreen(screen) {
 
     Object.values(screens).forEach(s => s.style.display = "none");
     screens[screen].style.display = "block";
+
+    // Update CSS file dynamically
+    const cssFile = {
+        login: "login.css",
+        main: "main.css",
+        settings: "settings.css"
+    };
+
+    document.getElementById("dynamicCSS").setAttribute("href", cssFile[screen]);
 }
 
-function displayAssignments(data) {
-    const outputDiv = document.getElementById("canvasOutput");
-    if(data.length === 0) {
-        outputDiv.innerHTML = "<p>No assignments found.</p>";
+function displayAssignments(assignments) {
+    const canvasOutput = document.getElementById("canvasOutput");
+    canvasOutput.innerHTML = ""; // Clear previous assignments
+
+    if (!assignments || assignments.length === 0) {
+        canvasOutput.innerHTML = "<p>No assignments found.</p>";
         return;
     }
 
-    outputDiv.innerHTML = data.map((item) => `
-        <div class="assignment-card">
-            <input type="checkbox" class="assignment-checkbox" data-title="${item.assignment}">
-            <p class="assignment-title">${item.assignment}</p>
-            <p class="assignment-course"><strong>Course:</strong> ${item.course}</p>
-            <p class="assignment-date">${item.dueDate ? `<strong>Due:</strong> ${item.dueDate}` : "<strong>Due:</strong> No Due Date"}</p>
-            <a href="${item.href}" target="_blank">${item.href ? "View Assignment" : "No Link Available"}</a>
-        </div>
-    `).join("");
+    assignments.forEach((assignment) => {
+        const assignmentCard = document.createElement("div");
+        assignmentCard.classList.add("assignment-card");
+
+        assignmentCard.innerHTML = `
+            <div>
+                <div class="assignment-title">
+                    <a href="${assignment.href}" target="_blank">${assignment.assignment}</a>
+                </div>
+                <div class="assignment-course">${assignment.course}</div>
+                <div class="assignment-date">${assignment.dueDate}</div>
+            </div>
+        `;
+
+        assignmentCard.addEventListener("click", (event) => {
+            if (event.target.tagName !== "A") {
+                assignmentCard.classList.toggle("selected");
+            }
+        });
+
+        canvasOutput.appendChild(assignmentCard);
+    });
 }

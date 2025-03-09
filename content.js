@@ -1,45 +1,56 @@
 (() => {
     console.log("Content script loaded.");
-    setTimeout(() => { //delaying scraping to ensure all necissary extensions load
+    setTimeout(() => {
         console.log("Scraping after delay..");
 
-        const dashboardCards = document.querySelectorAll(".ic-DashboardCard"); //gets all class elements
-
+        const dashboardCards = document.querySelectorAll(".ic-DashboardCard");
         const data = [];
-        dashboardCards.forEach((card) => { //goes through each course element
-            let ariaLabel = card.getAttribute("aria-label") || "Unknown Course"; //Gets the course name, defaults to unknown
 
+        dashboardCards.forEach((card) => {
+            let ariaLabel = card.getAttribute("aria-label") || "Unknown Course";
             const words = ariaLabel.split(" ");
-            let courseName= "unknownCourse";
-            if(words.length >= 3) {
-                const secondWord = words[1]; //course name
-                let thirdWord = words[2]; //course number
-                if(thirdWord.includes("-")) { //removes course section (ex; CS 101-A would be CS 101)
+            let courseName = "unknownCourse";
+
+            if (words.length >= 3) {
+                const secondWord = words[1];
+                let thirdWord = words[2];
+                if (thirdWord.includes("-")) {
                     thirdWord = thirdWord.split("-")[0];
                 }
                 courseName = secondWord + " " + thirdWord;
             }
 
-            const assignments = card.querySelectorAll(".bettercanvas-assignment-link"); //gets all assignments
+            const assignments = card.querySelectorAll(".bettercanvas-assignment-link");
 
             assignments.forEach((assignment) => {
-                const dueDateElement = assignment.closest(".bettercanvas-assignment-container").querySelector(".bettercanvas-assignment-dueat"); //gets due date
-                const dueDate = dueDateElement ? dueDateElement.textContent.trim() : "No Due Date"; //dueDate defaults to no due date
+                if (!assignment) return; // Skip undefined elements
 
+                const dueDateElement = assignment.closest(".bettercanvas-assignment-container")?.querySelector(".bettercanvas-assignment-dueat");
+                const dueDate = dueDateElement ? dueDateElement.textContent.trim() : "No Due Date";
 
-                data.push({
-                    course: courseName, //course name
-                    assignment: assignment.textContent.trim(), //assignment name
-                    href: assignment.href || null, //hyperlink to assignment, defaults to null
-                    dueDate: dueDate //assignment due date
-                });
+                const href = assignment.href || null;
+                const isCompleted = href && href.includes("/submissions/");
+
+                const assignmentText = assignment.textContent.trim();
+                
+                if (courseName && assignmentText && href) {
+                    data.push({
+                        course: courseName,
+                        assignment: assignmentText,
+                        href: href,
+                        dueDate: dueDate,
+                        completed: isCompleted
+                    });
+                } else {
+                    console.log("Skipping invalid assignment:", { courseName, assignmentText, href });
+                }
             });
         });
 
-        const filteredData = data.filter(item => item.assignment !== 'None'); //Gets rid off all elements with 'None' as datatype (to get rid of trash that scraper picks up)
-        
+        const filteredData = data.filter(item => item.assignment !== 'None' && !item.completed);
+
         chrome.runtime.sendMessage({ type: "STORE_SCRAPED_DATA", data: filteredData }, () => {
             console.log("Filtered data sent to background script:", filteredData);
         });
-    }, 3000) //delay time (3s)
+    }, 3000);
 })();

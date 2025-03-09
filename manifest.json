@@ -12,7 +12,9 @@
         "service_worker": "background.js"
     },
     "action": {
-        "default_popup": "popup.html"
+        "default_popup": "popup.html",
+        "default_width": 260,
+        "default_height": 320
     },
    "web_accessible_resources": [
         {

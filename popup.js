@@ -1,19 +1,20 @@
 document.addEventListener("DOMContentLoaded", () => {
-  // UI elements
-  const loginButton = document.getElementById("login");
-  const sendTasksButton = document.getElementById("sendTasks");
-  const logoutButton = document.getElementById("logoutButton");
-  const goToSettingsButton = document.getElementById("goToSettings");
-  const backToMainButton = document.getElementById("backToMain");
+    // UI elements
+    const loginButton = document.getElementById("login");
+    const sendTasksButton = document.getElementById("sendTasks");
+    const logoutButton = document.getElementById("logoutButton");
+    const goToSettingsButton = document.getElementById("goToSettings");
+    const backToMainButton = document.getElementById("backToMain");
 
-  loginButton.addEventListener("click", loginUser);
-  sendTasksButton.addEventListener("click", sendTasksToGoogle);
-  logoutButton.addEventListener("click", logoutUser);
-  goToSettingsButton.addEventListener("click", () => switchScreen("settings"));
-  backToMainButton.addEventListener("click", () => switchScreen("main"));
+    loginButton.addEventListener("click", loginUser);
+    sendTasksButton.addEventListener("click", sendTasksToGoogle);
+    logoutButton.addEventListener("click", logoutUser);
+    goToSettingsButton.addEventListener("click", () => switchScreen("settings"));
+    backToMainButton.addEventListener("click", () => switchScreen("main"));
 
-  checkLoginStatus();
+    checkLoginStatus();
 });
+
 
 //load after login
 function loadAssignments() {
@@ -97,15 +98,17 @@ function fetchAllTaskNames(callback) {
           .then(taskData => {
               if(taskData.items) {
                   taskData.items.forEach(task => {
-                      allTaskNames.push(task.title.trim());
+                    allTaskNames.push({
+                        title: task.title.trim(),
+                        completed: task.status === "completed"
+                    });
                   });
               }
               listsProcessed++;
-
               //when all lists processed, return data
               if(listsProcessed === data.items.length) {
                   // console.log("Loaded Google Task names:", allTaskNames);
-                  callback(allTaskNames);
+                  callback(allTaskNames.filter(task => !task.completed).map(task => task.title));
               }
           })
           .catch(error => {
@@ -143,79 +146,82 @@ function parseCanvasDate(canvasDate) {
 
 
 function sendTasksToGoogle() {
-  const token = localStorage.getItem("access_token");
-  if(!token) {
-      // console.log("No access token found.");
-      return;
-  }
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+        return;
+    }
 
-  const selectedTaskList = document.getElementById("taskLists").value;
-  if(!selectedTaskList) {
-      alert("Select a task list.");
-      return;
-  }
+    const selectedTaskList = document.getElementById("taskLists").value;
+    if (!selectedTaskList) {
+        alert("Select a task list.");
+        return;
+    }
 
-  const selectedAssignments = [...document.querySelectorAll(".assignment-checkbox:checked")]
-      .map(checkbox => scrapedData.find(item => item.assignment === checkbox.dataset.title));
+    const selectedAssignments = [...document.querySelectorAll(".assignment-card.selected")];
 
-  if(selectedAssignments.length === 0) {
-      alert("No assignments selected.");
-      return;
-  }
+    if (selectedAssignments.length === 0) {
+        alert("No assignments selected.");
+        return;
+    }
 
-  // console.log("Sending tasks to Google Tasks:", selectedAssignments);
+    selectedAssignments.forEach((card) => {
+        const assignmentTitle = card.querySelector(".assignment-title a").textContent;
+        const item = scrapedData.find(task => task.assignment === assignmentTitle);
 
-  selectedAssignments.forEach((item) => {
-      let dueDateISO = null;
-      if(item.dueDate && item.dueDate.toLowerCase() !== "no due date") {
-          dueDateISO = parseCanvasDate(item.dueDate);
-      }
+        if (!item) return;
 
-      const task = {
-          title: `${item.course} → ${item.assignment}`,
-          notes: item.href ? item.href : "",
-      };
+        let dueDateISO = null;
+        if (item.dueDate && item.dueDate.toLowerCase() !== "no due date") {
+            dueDateISO = parseCanvasDate(item.dueDate);
+        }
 
-      if(dueDateISO) {
-          task.due = dueDateISO; //google task needs iso formatting
-      }
+        const task = {
+            title: `${item.course} → ${item.assignment}`,
+            notes: item.href ? item.href : "",
+        };
 
-      fetch(`https://tasks.googleapis.com/tasks/v1/lists/${selectedTaskList}/tasks`, {
-          method: "POST",
-          headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json"
-          },
-          body: JSON.stringify(task)
-      })
-      .then(res => res.json())
-      .then(data => {
-          // console.log("Task added:", data);
+        if (dueDateISO) {
+            task.due = dueDateISO; //google task needs ISO formatting
+        }
 
-          //removes task from UI
-          document.querySelector(`input[data-title="${item.assignment}"]`).closest(".assignment-card").remove();
-      })
-      .catch(error => console.error("Error adding task:", error));
-  });
+        fetch(`https://tasks.googleapis.com/tasks/v1/lists/${selectedTaskList}/tasks`, {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(task)
+        })
+        .then(res => res.json())
+        .then(() => {
+            card.classList.add("removing"); //adds animation class
+            setTimeout(() => {
+                card.style.display = "none"; //hides
+                card.remove(); //removes
+            }, 500); //matches the animation with the sending
+        })
+        .catch(error => console.log("Error adding task:", error));
+    });
 
-  alert("Tasks sent to Google Tasks.");
+    // alert("Tasks sent to Google Tasks.");
 }
 
 
 
-//ensures tasks load after login
-function checkLoginStatus() {
-  chrome.runtime.sendMessage({ type: "LOGIN" }, (response) => {
-      if(response.success) {
-          // console.log("User logged in.");
-          switchScreen("main");
 
-          //loads assignments and task list
-          loadAssignments();
-          loadGoogleTaskLists();
-      } else {
-          // console.log("User not logged in.");
-          switchScreen("login");
-      }
-  });
-}
+// //ensures tasks load after login
+// function checkLoginStatus() {
+//   chrome.runtime.sendMessage({ type: "LOGIN" }, (response) => {
+//       if(response.success) {
+//           // console.log("User logged in.");
+//           switchScreen("main");
+
+//           //loads assignments and task list
+//           loadAssignments();
+//           loadGoogleTaskLists();
+//       } else {
+//           // console.log("User not logged in.");
+//           switchScreen("login");
+//       }
+//   });
+// }

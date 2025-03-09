@@ -1,0 +1,58 @@
+/* 🌟 Compact Settings Screen */
+body {
+    font-family: Arial, sans-serif;
+    background-color: #FFFFFE;
+    color: #333;
+    margin: 0;
+    padding: 0;
+    width: 120px !important;
+    height: 110px !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border-radius: 12px;
+}
+
+.settings-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+.vertical-center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -45%);
+    text-align: center;
+    width: 100%;
+}
+
+button {
+    background: linear-gradient(135deg, #9D1535, #7A1028);
+    color: white;
+    transition: all 0.3s ease;
+    box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 10px;
+    width: 85%;
+    max-width: 100px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: bold;
+    border: none;
+    cursor: pointer;
+    margin-bottom: 8px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+button:hover {
+    background: linear-gradient(135deg, #B81C40, #8A142F);
+    transform: scale(1.02);
+    box-shadow: 4px 4px 10px rgba(0, 0, 0, 0.2);
+}

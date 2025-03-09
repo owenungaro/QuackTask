@@ -1,13 +1,14 @@
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if(message.type === "STORE_SCRAPED_DATA") {
+    if (message.type === "STORE_SCRAPED_DATA") {
+        console.log("Storing scraped data:", message.data);
         chrome.storage.local.set({ scrapedData: message.data }, () => {
-            // console.log("Scraped data successfully stored in Chrome storage:", message.data);
+            console.log("Scraped data stored successfully.");
         });
     }
 
-    if(message.type === "GET_SCRAPED_DATA") {
+    if (message.type === "GET_SCRAPED_DATA") {
         chrome.storage.local.get(["scrapedData"], (result) => {
-            // console.log("Retrieved scraped data from storage:", result.scrapedData);
+            console.log("Sending stored scraped data:", result.scrapedData);
             sendResponse(result.scrapedData || []);
         });
         return true;
@@ -32,7 +33,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if(message.type === "LOGIN") {
         chrome.identity.getAuthToken({interactive: true}, (token) => {
             if(chrome.runtime.lastError) {
-                console.error("Auth Error:", chrome.runtime.lastError.message);
+                // console.log("Auth Error:", chrome.runtime.lastError.message);
                 sendResponse({success: false, error: chrome.runtime.lastError});
                 return;
             }
