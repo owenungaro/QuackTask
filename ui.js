@@ -8,7 +8,7 @@ function switchScreen(screen) {
     Object.values(screens).forEach(s => s.style.display = "none");
     screens[screen].style.display = "block";
 
-    // Update CSS file dynamically
+    //update CSS file dynamically
     const cssFile = {
         login: "login.css",
         main: "main.css",
@@ -20,7 +20,7 @@ function switchScreen(screen) {
 
 function displayAssignments(assignments) {
     const canvasOutput = document.getElementById("canvasOutput");
-    canvasOutput.innerHTML = ""; // Clear previous assignments
+    canvasOutput.innerHTML = ""; //clear previous assignments
 
     if (!assignments || assignments.length === 0) {
         canvasOutput.innerHTML = "<p>No assignments found.</p>";
