@@ -5,7 +5,9 @@
 
   
 
-QuackTask is a Chrome extension that integrates Canvas tasks, homework, and assignments into Google Tasks for students at Stevens Institute of Technology. Currently, it is in the process of being approved as an official extension on the Chrome Web Store.
+QuackTask is a Chrome extension that integrates Canvas tasks, homework, and assignments into Google Tasks for students at Stevens Institute of Technology. Currently on the Chrome Store!
+
+https://chromewebstore.google.com/detail/quacktask/cpmbfihgmlpkgpadfbdfgbepkgoighie
 
   
 
@@ -75,7 +77,6 @@ git clone https://github.com/owenungaro/QuackTask.git
 
   
 
-- Official Chrome Web Store approval.
 
 - Improved error handling and debugging.
 
