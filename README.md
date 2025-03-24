@@ -76,7 +76,7 @@ git clone https://github.com/owenungaro/QuackTask.git
 ## Future Updates
 
   
-
+- QuackTask website for OAuth App Verication via home page and privacy policy.
 
 - Improved error handling and debugging.
 
