@@ -5,6 +5,7 @@
 
         const dashboardCards = document.querySelectorAll(".ic-DashboardCard");
         const data = [];
+        const seen = new Set(); // dedupe by course+title+href
 
         dashboardCards.forEach((card) => {
             let ariaLabel = card.getAttribute("aria-label") || "Unknown Course";
@@ -20,29 +21,62 @@
                 courseName = secondWord + " " + thirdWord;
             }
 
-            const assignments = card.querySelectorAll(".bettercanvas-assignment-link");
+            // NEW LAYOUT: <div class="bettercanvas-card-assignments"> with <a><span>title</span><span>due</span></a>
+            const assignmentsContainer = card.querySelector(".bettercanvas-card-assignments");
+            if (assignmentsContainer) {
+                const newAssignments = assignmentsContainer.querySelectorAll("a[href]");
+                newAssignments.forEach((a) => {
+                    const spans = a.querySelectorAll("span");
+                    const assignmentText = (spans[0]?.textContent || a.textContent || "").trim();
+                    const dueDate = (spans[1]?.textContent || "").trim() || "No Due Date";
+                    const href = a.href || null;
+                    const isCompleted = href && href.includes("/submissions/");
 
-            assignments.forEach((assignment) => {
-                if (!assignment) return; // Skip undefined elements
+                    if (courseName && assignmentText && href) {
+                        const key = `${courseName}||${assignmentText}||${href}`;
+                        if (!seen.has(key)) {
+                            seen.add(key);
+                            data.push({
+                                course: courseName,
+                                assignment: assignmentText,
+                                href: href,
+                                dueDate: dueDate,
+                                completed: isCompleted
+                            });
+                        }
+                    } else {
+                        console.log("Skipping invalid (new) assignment:", { courseName, assignmentText, href });
+                    }
+                });
+            }
 
-                const dueDateElement = assignment.closest(".bettercanvas-assignment-container")?.querySelector(".bettercanvas-assignment-dueat");
+            // OLD LAYOUT: .bettercanvas-assignment-link inside a container that also has .bettercanvas-assignment-dueat
+            const oldAssignments = card.querySelectorAll(".bettercanvas-assignment-link");
+            oldAssignments.forEach((assignment) => {
+                if (!assignment) return;
+
+                const container = assignment.closest(".bettercanvas-assignment-container");
+                const dueDateElement = container?.querySelector(".bettercanvas-assignment-dueat");
                 const dueDate = dueDateElement ? dueDateElement.textContent.trim() : "No Due Date";
 
                 const href = assignment.href || null;
                 const isCompleted = href && href.includes("/submissions/");
-
                 const assignmentText = assignment.textContent.trim();
-                
+
                 if (courseName && assignmentText && href) {
-                    data.push({
-                        course: courseName,
-                        assignment: assignmentText,
-                        href: href,
-                        dueDate: dueDate,
-                        completed: isCompleted
-                    });
+                    const key = `${courseName}||${assignmentText}||${href}`;
+                    if (!seen.has(key)) {
+                        seen.add(key);
+                        data.push({
+                            course: courseName,
+                            assignment: assignmentText,
+                            href: href,
+                            dueDate: dueDate,
+                            completed: isCompleted
+                        });
+                    }
                 } else {
-                    console.log("Skipping invalid assignment:", { courseName, assignmentText, href });
+                    console.log("Skipping invalid (old) assignment:", { courseName, assignmentText, href });
                 }
             });
         });
