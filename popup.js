@@ -68,66 +68,46 @@ function loadGoogleTaskLists() {
 
 // 🔹 Send Assignments to Google Tasks
 function fetchAllTaskNames(callback) {
-  const token = localStorage.getItem("access_token");
-  if(!token) {
-      // console.log("No access token found.");
-      callback([]);
-      return;
-  }
-
-  fetch("https://tasks.googleapis.com/tasks/v1/users/@me/lists", {
+    const token = localStorage.getItem("access_token");
+    if (!token) { callback([]); return; }
+  
+    fetch("https://tasks.googleapis.com/tasks/v1/users/@me/lists", {
       headers: { Authorization: `Bearer ${token}` }
-  })
-  .then(res => res.json())
-  .then(data => {
-      if(!data.items || data.items.length === 0) {
-          // console.log("No task lists found.");
-          callback([]);
-          return;
-      }
-
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (!data.items || data.items.length === 0) { callback([]); return; }
+  
       let allTaskNames = [];
       let listsProcessed = 0;
-
-      // Fetch tasks from each task list
+  
       data.items.forEach((list) => {
-          fetch(`https://tasks.googleapis.com/tasks/v1/lists/${list.id}/tasks?showCompleted=false`, {
-              headers: { Authorization: `Bearer ${token}` }
-          })
-          .then(res => res.json())
-          .then(taskData => {
-              if(taskData.items) {
-                  taskData.items.forEach(task => {
-                    allTaskNames.push({
-                        title: task.title.trim(),
-                        completed: task.status === "completed"
-                    });
-                  });
-              }
-              listsProcessed++;
-              //when all lists processed, return data
-              if(listsProcessed === data.items.length) {
-                  // console.log("Loaded Google Task names:", allTaskNames);
-                  callback(allTaskNames.filter(task => !task.completed).map(task => task.title));
-              }
-          })
-          .catch(error => {
-              // console.log("Error fetching tasks:", error);
-              listsProcessed++;
-              if (listsProcessed === data.items.length) {
-                  callback(allTaskNames);
-              }
-          });
+        fetch(`https://tasks.googleapis.com/tasks/v1/lists/${list.id}/tasks?showCompleted=true&showHidden=true`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        .then(res => res.json())
+        .then(taskData => {
+          if (taskData.items) {
+            taskData.items.forEach(task => {
+              if (task.title) allTaskNames.push(task.title.trim());
+            });
+          }
+          listsProcessed++;
+          if (listsProcessed === data.items.length) {
+            // return ALL titles (completed + incomplete)
+            callback(allTaskNames);
+          }
+        })
+        .catch(() => {
+          listsProcessed++;
+          if (listsProcessed === data.items.length) callback(allTaskNames);
+        });
       });
-  })
-  .catch(error => {
-      // console.log("Error fetching Google Task lists:", error);
-      callback([]);
-  });
-}
+    })
+    .catch(() => callback([]));
+  }
+  
 
-// Strict parser -> RFC3339 date (midnight Z). Accepts "Sep 9", "September 9",
-// "9/12", "9/12/2025". If no 4-digit year, uses the current year.
 function parseCanvasDate(raw) {
   if (!raw) return null;
 
@@ -142,8 +122,8 @@ function parseCanvasDate(raw) {
     const m = parseInt(num[1], 10) - 1;
     const d = parseInt(num[2], 10);
     const y = num[3] ? parseInt(num[3], 10) : Y;
-    const dt = new Date(Date.UTC(y, m, d));           // midnight UTC
-    return isNaN(dt) ? null : dt.toISOString();       // RFC3339
+    const dt = new Date(Date.UTC(y, m, d));
+    return isNaN(dt) ? null : dt.toISOString();
   }
 
   // 2) Month-name: "Sep 9" / "September 9" / with optional ", YYYY"
