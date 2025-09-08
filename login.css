@@ -1,7 +1,20 @@
+/* Login screen redesigned to feel fuller and on-brand (red/white) */
+:root {
+    --red-700: #9D1535;
+    --red-800: #7A1028;
+    --ink-900: #1F2937;
+    --ink-600: #6B7280;
+    --bg-0: #FFFFFF;
+    --r-10: 10px;
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.08);
+    --shadow-2: 0 10px 24px rgba(0, 0, 0, 0.14);
+    --ring: 0 0 0 3px rgba(157, 21, 53, 0.25);
+}
+
 body {
-    font-family: Arial, sans-serif;
-    background-color: #FFFFFE;
-    color: #333;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans";
+    background: #FFFFFF;
+    color: var(--ink-900);
     margin: 0;
     padding: 0;
     width: 260px !important;
@@ -11,39 +24,47 @@ body {
     justify-content: center;
     overflow: hidden;
     border-radius: 12px;
+    box-sizing: border-box;
 }
 
 #loginScreen {
     position: relative;
     width: 100%;
     height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
 }
 
+/* Remove pseudo elements to keep only the button */
+#loginScreen::before, #loginScreen::after { content: none; }
+
 #login {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 85%;
+    position: relative;
+    width: 86%;
     max-width: 220px;
-    padding: 14px;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: bold;
-    border: none;
+    padding: 12px 14px;
+    border-radius: var(--r-10);
+    font-size: 13px;
+    font-weight: 800;
+    border: 1px solid rgba(157, 21, 53, 0.15);
     cursor: pointer;
-    background: linear-gradient(135deg, #9D1535, #7A1028);
-    color: white;
-    transition: all 0.3s ease;
-    box-shadow: 3px 3px 8px rgba(0, 0, 0, 0.1);
+    background: linear-gradient(180deg, var(--red-700), var(--red-800));
+    color: #FFFFFF;
+    transition: transform 120ms cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 200ms cubic-bezier(0.2, 0.7, 0.2, 1), background 120ms ease;
     text-align: center;
     display: flex;
     justify-content: center;
     align-items: center;
+    gap: 0;
+    box-shadow: var(--shadow-1);
+    margin: 0 auto;
 }
 
-#login:hover {
-    background: linear-gradient(135deg, #B81C40, #8A142F);
-    transform: translate(-50%, -50%) scale(1.02); /*stays centered while scaling*/
-    box-shadow: 4px 4px 10px rgba(0, 0, 0, 0.15);
-}
+/* Remove button icon for minimal layout */
+#login::before { content: none; }
+
+#login:hover { transform: translateY(-1px); box-shadow: var(--shadow-2); }
+#login:active { transform: translateY(0); box-shadow: var(--shadow-1); }
+#login:focus-visible { outline: none; box-shadow: var(--shadow-2), var(--ring); }

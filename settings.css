@@ -1,10 +1,22 @@
-/* 🌟 Compact Settings Screen */
+/* Settings screen — aligned with main red/white design */
+:root {
+    --red-700: #9D1535;
+    --red-800: #7A1028;
+    --ink-900: #1F2937;
+    --bg-0: #FFFFFF;
+    --bg-1: #F9FAFB;
+    --r-10: 10px;
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.08);
+    --shadow-2: 0 6px 18px rgba(0, 0, 0, 0.14);
+    --ring: 0 0 0 3px rgba(157, 21, 53, 0.25);
+}
+
 body {
-    font-family: Arial, sans-serif;
-    background-color: #FFFFFE;
-    color: #333;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans";
+    background: radial-gradient(600px 240px at 50% -60px, rgba(157, 21, 53, 0.06), transparent 50%), var(--bg-0);
+    color: var(--ink-900);
     margin: 0;
-    padding: 0;
+    padding: 8px;
     width: 120px !important;
     height: 110px !important;
     display: flex;
@@ -12,6 +24,7 @@ body {
     justify-content: center;
     overflow: hidden;
     border-radius: 12px;
+    box-sizing: border-box;
 }
 
 .settings-container {
@@ -30,29 +43,28 @@ body {
 }
 
 button {
-    background: linear-gradient(135deg, #9D1535, #7A1028);
-    color: white;
-    transition: all 0.3s ease;
-    box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.1);
+    background: linear-gradient(180deg, var(--red-700), var(--red-800));
+    color: #FFFFFF;
+    transition: transform 120ms cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 200ms cubic-bezier(0.2, 0.7, 0.2, 1);
+    box-shadow: var(--shadow-1);
     text-align: center;
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: 10px;
-    width: 85%;
-    max-width: 100px;
-    border-radius: 8px;
+    padding: 8px 10px;
+    width: 88%;
+    max-width: 120px;
+    border-radius: var(--r-10);
     font-size: 12px;
-    font-weight: bold;
-    border: none;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    border: 1px solid rgba(157, 21, 53, 0.15);
     cursor: pointer;
     margin-bottom: 8px;
     margin-left: auto;
     margin-right: auto;
 }
 
-button:hover {
-    background: linear-gradient(135deg, #B81C40, #8A142F);
-    transform: scale(1.02);
-    box-shadow: 4px 4px 10px rgba(0, 0, 0, 0.2);
-}
+button:hover { transform: translateY(-1px); box-shadow: var(--shadow-2); }
+button:active { transform: translateY(0); box-shadow: var(--shadow-1); }
+button:focus-visible { outline: none; box-shadow: var(--shadow-2), var(--ring); }
