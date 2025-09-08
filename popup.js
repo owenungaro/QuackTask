@@ -126,23 +126,44 @@ function fetchAllTaskNames(callback) {
   });
 }
 
-function parseCanvasDate(canvasDate) {
-  if(!canvasDate || canvasDate.toLowerCase() === "no due date") return null;
+// Strict parser -> RFC3339 date (midnight Z). Accepts "Sep 9", "September 9",
+// "9/12", "9/12/2025". If no 4-digit year, uses the current year.
+function parseCanvasDate(raw) {
+  if (!raw) return null;
 
-  const dateParts = canvasDate.split("/");
-  if(dateParts.length === 2 || dateParts.length === 3) {
-      let month = parseInt(dateParts[0], 10) - 1;
-      let day = parseInt(dateParts[1], 10);
-      let year = new Date().getFullYear();
+  let s = raw.replace(/^due\s*/i, "").trim();
+  if (/^no due date$/i.test(s)) return null;
 
-      if(dateParts.length === 3) year = parseInt(dateParts[2], 10);
+  const Y = new Date().getFullYear();
 
-      const parsedDate = new Date(year, month, day);
-      return isNaN(parsedDate.getTime()) ? null : parsedDate.toISOString();
+  // 1) Numeric M/D or M/D/YYYY
+  const num = s.match(/^(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{4}))?$/);
+  if (num) {
+    const m = parseInt(num[1], 10) - 1;
+    const d = parseInt(num[2], 10);
+    const y = num[3] ? parseInt(num[3], 10) : Y;
+    const dt = new Date(Date.UTC(y, m, d));           // midnight UTC
+    return isNaN(dt) ? null : dt.toISOString();       // RFC3339
   }
 
-  return null;
+  // 2) Month-name: "Sep 9" / "September 9" / with optional ", YYYY"
+  const months = {
+    jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,sept:8,oct:9,nov:10,dec:11
+  };
+  const name = s.match(/^([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?$/);
+  if (name) {
+    const monKey = name[1].toLowerCase().slice(0,4);
+    const m = months[monKey];
+    if (m == null) return null;
+    const d = parseInt(name[2], 10);
+    const y = name[3] ? parseInt(name[3], 10) : Y;
+    const dt = new Date(Date.UTC(y, m, d));
+    return isNaN(dt) ? null : dt.toISOString();
+  }
+
+  return null; // anything else is unsupported
 }
+
 
 
 function sendTasksToGoogle() {
