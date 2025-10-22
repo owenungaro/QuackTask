@@ -1,90 +1,54 @@
 (() => {
-    console.log("Content script loaded.");
-    setTimeout(() => {
-        console.log("Scraping after delay..");
+  console.log("Tasks for Canvas scraper loaded.");
+  setTimeout(() => {
+    console.log("Scraping Tasks for Canvas...");
 
-        const dashboardCards = document.querySelectorAll(".ic-DashboardCard");
-        const data = [];
-        const seen = new Set(); // dedupe by course+title+href
+    const cards = document.querySelectorAll(".sc-hHftDr.kVpUOE");
+    const data = [];
+    const seen = new Set();
 
-        dashboardCards.forEach((card) => {
-            let ariaLabel = card.getAttribute("aria-label") || "Unknown Course";
-            const words = ariaLabel.split(" ");
-            let courseName = "unknownCourse";
+    cards.forEach((card) => {
+      const course =
+        card.querySelector(".sc-bBXqnf")?.textContent?.trim() ||
+        "Unknown Course";
+      const title =
+        card.querySelector("a.sc-kfzAmx")?.textContent?.trim() || "Untitled";
+      const href = card.querySelector("a.sc-kfzAmx")?.href || null;
 
-            if (words.length >= 3) {
-                const secondWord = words[1];
-                let thirdWord = words[2];
-                if (thirdWord.includes("-")) {
-                    thirdWord = thirdWord.split("-")[0];
-                }
-                courseName = secondWord + " " + thirdWord;
-            }
+      // Extract due date text like "Due Oct 22 at 11:59 PM | 100 points"
+      let dueDate = "No Due Date";
+      const dueDiv = card.querySelector(".sc-cxFLnm");
+      if (dueDiv) {
+        const match = dueDiv.textContent.match(
+          /Due\s+([A-Za-z]+\s+\d{1,2}(?:\s+at\s+\d{1,2}:\d{2}\s+[AP]M)?)/i
+        );
+        if (match) dueDate = match[1].trim();
+      }
 
-            // NEW LAYOUT: <div class="bettercanvas-card-assignments"> with <a><span>title</span><span>due</span></a>
-            const assignmentsContainer = card.querySelector(".bettercanvas-card-assignments");
-            if (assignmentsContainer) {
-                const newAssignments = assignmentsContainer.querySelectorAll("a[href]");
-                newAssignments.forEach((a) => {
-                    const spans = a.querySelectorAll("span");
-                    const assignmentText = (spans[0]?.textContent || a.textContent || "").trim();
-                    const dueDate = (spans[1]?.textContent || "").trim() || "No Due Date";
-                    const href = a.href || null;
-                    const isCompleted = href && href.includes("/submissions/");
+      if (course && title && href) {
+        const key = `${course}||${title}||${href}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          data.push({
+            course,
+            assignment: title,
+            href,
+            dueDate,
+            completed: false,
+          });
+        }
+      }
+    });
 
-                    if (courseName && assignmentText && href) {
-                        const key = `${courseName}||${assignmentText}||${href}`;
-                        if (!seen.has(key)) {
-                            seen.add(key);
-                            data.push({
-                                course: courseName,
-                                assignment: assignmentText,
-                                href: href,
-                                dueDate: dueDate,
-                                completed: isCompleted
-                            });
-                        }
-                    } else {
-                        console.log("Skipping invalid (new) assignment:", { courseName, assignmentText, href });
-                    }
-                });
-            }
+    const filteredData = data.filter(
+      (item) => item.assignment !== "None" && !item.completed
+    );
 
-            // OLD LAYOUT: .bettercanvas-assignment-link inside a container that also has .bettercanvas-assignment-dueat
-            const oldAssignments = card.querySelectorAll(".bettercanvas-assignment-link");
-            oldAssignments.forEach((assignment) => {
-                if (!assignment) return;
-
-                const container = assignment.closest(".bettercanvas-assignment-container");
-                const dueDateElement = container?.querySelector(".bettercanvas-assignment-dueat");
-                const dueDate = dueDateElement ? dueDateElement.textContent.trim() : "No Due Date";
-
-                const href = assignment.href || null;
-                const isCompleted = href && href.includes("/submissions/");
-                const assignmentText = assignment.textContent.trim();
-
-                if (courseName && assignmentText && href) {
-                    const key = `${courseName}||${assignmentText}||${href}`;
-                    if (!seen.has(key)) {
-                        seen.add(key);
-                        data.push({
-                            course: courseName,
-                            assignment: assignmentText,
-                            href: href,
-                            dueDate: dueDate,
-                            completed: isCompleted
-                        });
-                    }
-                } else {
-                    console.log("Skipping invalid (old) assignment:", { courseName, assignmentText, href });
-                }
-            });
-        });
-
-        const filteredData = data.filter(item => item.assignment !== 'None' && !item.completed);
-
-        chrome.runtime.sendMessage({ type: "STORE_SCRAPED_DATA", data: filteredData }, () => {
-            console.log("Filtered data sent to background script:", filteredData);
-        });
-    }, 3000);
+    chrome.runtime.sendMessage(
+      { type: "STORE_SCRAPED_DATA", data: filteredData },
+      () => {
+        console.log("Tasks for Canvas data sent:", filteredData);
+      }
+    );
+  }, 2500);
 })();
