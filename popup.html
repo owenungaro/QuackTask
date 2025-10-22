@@ -1,51 +1,55 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>QuackTask</title>
-    <link id="dynamicCSS" rel="stylesheet" href="login.css">
-    <link rel="stylesheet" href="main.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-</head>
-<body>
+    <link id="dynamicCSS" rel="stylesheet" href="login.css" />
+    <link rel="stylesheet" href="main.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+  </head>
+  <body>
     <div id="loginScreen" class="screen">
-        <button id="login" class="btn">Login with Google</button>
+      <button id="login" class="btn">Login with Google</button>
     </div>
 
     <div id="mainScreen" class="screen hidden">
-        <div class="main-content">
-            <div class="fixed-top">
-                <p id="userInfo"></p>
-                <button id="goToSettings" class="btn">Settings</button>
-                <select id="taskLists" class="dropdown"></select>
-                <button id="sendTasks" class="btn">Send to Google Tasks</button>
-            </div>
-
-            <div id="canvasOutput" class="assignment-container">
-                <div id="loadingContainer" class="loading-container">
-                    <span class="loading-spinner"></span>
-                    <p>Loading assignments...</p>
-                </div>
-
-                <div id="noAssignments" class="no-assignments hidden">
-                    <i class="fas fa-exclamation-circle"></i>
-                    <p>No assignments found</p>
-                </div>
-            </div>
+      <div class="main-content">
+        <div class="fixed-top">
+          <p id="userInfo"></p>
+          <button id="goToSettings" class="btn">Settings</button>
+          <select id="taskLists" class="dropdown"></select>
+          <button id="sendTasks" class="btn">Send to Google Tasks</button>
         </div>
+
+        <div id="canvasOutput" class="assignment-container">
+          <div id="loadingContainer" class="loading-container">
+            <span class="loading-spinner"></span>
+            <p>Loading assignments...</p>
+          </div>
+
+          <div id="noAssignments" class="no-assignments hidden">
+            <i class="fas fa-exclamation-circle"></i>
+            <p>No assignments found</p>
+          </div>
+        </div>
+      </div>
     </div>
     <div id="settingsScreen" class="settings-container">
-        <div class="vertical-center">
-            <button id="logoutButton">Logout</button>
-            <button id="backToMain">Back</button>
-        </div>
+      <div class="vertical-center">
+        <button id="logoutButton">Logout</button>
+        <button id="backToMain">Back</button>
+        <h3 id="blacklistTitle">Hidden Assignments</h3>
+        <ul id="blacklistList" class="blacklist-list"></ul>
+      </div>
     </div>
-
 
     <script src="ui.js"></script>
     <script src="auth.js"></script>
     <script src="assignments.js"></script>
     <script src="popup.js"></script>
-</body>
+  </body>
 </html>

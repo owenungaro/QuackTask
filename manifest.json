@@ -1,48 +1,46 @@
 {
-    "manifest_version": 3,
-    "name": "QuackTask",
-    "version": "1.3",
-    "description": "Sync your Canvas tasks with Google Tasks to stay organized and on top of your assignments effortlessly.",
-    "permissions": ["scripting", "activeTab", "storage", "identity"],
-    "host_permissions": [
-        "https://sit.instructure.com/*",
-        "https://www.googleapis.com/*"
-    ],
-    "background": {
-        "service_worker": "background.js"
-    },
-    "action": {
-        "default_popup": "popup.html",
-        "default_width": 260,
-        "default_height": 320
-
-    },
-    "icons": {
-        "16": "images/quacktasklogo_16x.png",
-        "32": "images/quacktasklogo_32x.png",
-        "48": "images/quacktasklogo_48x.png",
-        "128": "images/quacktasklogo_128x.png"
-    },
-   "web_accessible_resources": [
-        {
-            "resources": ["popup.js", "auth.js", "assignments.js", "ui.js"],
-            "matches": ["<all_urls>"]
-        }
-    ],
-
-
-    "content_scripts": [
-        {
-            "matches": ["https://sit.instructure.com/*"],
-            "js": ["content.js"]
-        }
-    ],
-    "oauth2": {
-        "client_id": "703082686303-1g2ro3u2p2d2ngh9e9t9evhqcqlfo8f1.apps.googleusercontent.com",
-        "scopes": [
-            "https://www.googleapis.com/auth/tasks",
-            "https://www.googleapis.com/auth/userinfo.profile",
-            "https://www.googleapis.com/auth/userinfo.email"
-        ]
+  "manifest_version": 3,
+  "name": "QuackTask",
+  "version": "1.3",
+  "description": "Sync your Canvas tasks with Google Tasks to stay organized and on top of your assignments effortlessly.",
+  "permissions": ["scripting", "activeTab", "storage", "identity"],
+  "host_permissions": [
+    "https://sit.instructure.com/*",
+    "https://www.googleapis.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_width": 260,
+    "default_height": 320
+  },
+  "icons": {
+    "16": "images/quacktasklogo_16x.png",
+    "32": "images/quacktasklogo_32x.png",
+    "48": "images/quacktasklogo_48x.png",
+    "128": "images/quacktasklogo_128x.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["popup.js", "auth.js", "assignments.js", "ui.js"],
+      "matches": ["<all_urls>"]
     }
+  ],
+
+  "content_scripts": [
+    {
+      "matches": ["https://sit.instructure.com/*"],
+      "js": ["content.js"]
+    }
+  ],
+  "oauth2": {
+    "client_id": "703082686303-7o90n2qpgc1lbboas0gh4d5fpkufuh68.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/tasks",
+      "https://www.googleapis.com/auth/userinfo.profile",
+      "https://www.googleapis.com/auth/userinfo.email"
+    ]
+  }
 }
