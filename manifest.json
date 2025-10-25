@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "QuackTask",
-  "version": "1.3",
+  "version": "1.4",
   "description": "Sync your Canvas tasks with Google Tasks to stay organized and on top of your assignments effortlessly.",
   "permissions": ["scripting", "activeTab", "storage", "identity"],
   "host_permissions": [
@@ -36,7 +36,7 @@
     }
   ],
   "oauth2": {
-    "client_id": "703082686303-7o90n2qpgc1lbboas0gh4d5fpkufuh68.apps.googleusercontent.com",
+    "client_id": "703082686303-1g2ro3u2p2d2ngh9e9t9evhqcqlfo8f1.apps.googleusercontent.com",
     "scopes": [
       "https://www.googleapis.com/auth/tasks",
       "https://www.googleapis.com/auth/userinfo.profile",
