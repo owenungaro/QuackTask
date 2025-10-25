@@ -126,7 +126,44 @@ function parseCanvasDate(raw) {
 
   const Y = new Date().getFullYear();
 
-  // 1) Numeric M/D or M/D/YYYY
+  // Month-name: "Oct 25 at 11:59 PM" or "October 25, 2025 at 11:59 PM"
+  const nameTime = s.match(
+    /^([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?(?:\s+at\s+(\d{1,2}):(\d{2})\s*([AP]M))?$/i
+  );
+  if (nameTime) {
+    const months = {
+      jan: 0,
+      feb: 1,
+      mar: 2,
+      apr: 3,
+      may: 4,
+      jun: 5,
+      jul: 6,
+      aug: 7,
+      sep: 8,
+      sept: 8,
+      oct: 9,
+      nov: 10,
+      dec: 11,
+    };
+    const monKey = nameTime[1].toLowerCase().slice(0, 4);
+    const m = months[monKey];
+    const d = parseInt(nameTime[2], 10);
+    const y = nameTime[3] ? parseInt(nameTime[3], 10) : Y;
+
+    let hour = parseInt(nameTime[4] || "0", 10);
+    const minute = parseInt(nameTime[5] || "0", 10);
+    const ampm = (nameTime[6] || "").toUpperCase();
+
+    if (ampm === "PM" && hour < 12) hour += 12;
+    if (ampm === "AM" && hour === 12) hour = 0;
+
+    // Create UTC date (Google Tasks expects RFC3339/ISO 8601 UTC)
+    const dt = new Date(Date.UTC(y, m, d, hour, minute));
+    return isNaN(dt) ? null : dt.toISOString();
+  }
+
+  // fallback: numeric M/D/YYYY
   const num = s.match(/^(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{4}))?$/);
   if (num) {
     const m = parseInt(num[1], 10) - 1;
@@ -136,34 +173,7 @@ function parseCanvasDate(raw) {
     return isNaN(dt) ? null : dt.toISOString();
   }
 
-  // 2) Month-name: "Sep 9" / "September 9" / with optional ", YYYY"
-  const months = {
-    jan: 0,
-    feb: 1,
-    mar: 2,
-    apr: 3,
-    may: 4,
-    jun: 5,
-    jul: 6,
-    aug: 7,
-    sep: 8,
-    sept: 8,
-    oct: 9,
-    nov: 10,
-    dec: 11,
-  };
-  const name = s.match(/^([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?$/);
-  if (name) {
-    const monKey = name[1].toLowerCase().slice(0, 4);
-    const m = months[monKey];
-    if (m == null) return null;
-    const d = parseInt(name[2], 10);
-    const y = name[3] ? parseInt(name[3], 10) : Y;
-    const dt = new Date(Date.UTC(y, m, d));
-    return isNaN(dt) ? null : dt.toISOString();
-  }
-
-  return null; // anything else is unsupported
+  return null;
 }
 
 function sendTasksToGoogle() {
