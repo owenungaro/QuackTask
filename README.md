@@ -65,7 +65,7 @@ git clone https://github.com/owenungaro/QuackTask.git
 
 2. Log in with your Google account to connect Google Tasks.
 
-3. Ensure the **Better Canvas Extension** is installed ([Get it here](https://chromewebstore.google.com/detail/better-canvas/cndibmoanboadcifjkjbdpjgfedanolh?hl=en)) and logged into Canvas.
+3. Ensure the **Tasks for Canvas** is installed ([Get it here](https://chromewebstore.google.com/detail/tasks-for-canvas-%E2%80%93-now-su/kabafodfnabokkkddjbnkgbcbmipdlmb)) and logged into Canvas.
 
 4.  **Important:** To scrape assignments successfully, you must be on your Canvas home page (`sit.instructure.com`) while QuackTask is in the "Loading Assignments" stage.
 
