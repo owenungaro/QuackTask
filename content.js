@@ -1,59 +1,91 @@
 (() => {
-  console.log("Tasks for Canvas scraper loaded.");
+  console.log("QuackTask Listening");
 
-  const checkLoaded = setInterval(() => {
-    const cards = document.querySelectorAll(".sc-hHftDr.kVpUOE");
+  let lastScrape = "";
 
-    if (cards.length > 0) {
-      clearInterval(checkLoaded);
-      console.log(
-        `Scraping Tasks for Canvas after ${performance.now() / 1000}s`
-      );
+  function scrapeTasks() {
+    const cards = document.querySelectorAll(
+      ".ic-DashboardCard, [data-testid='planner-item']"
+    );
 
-      const data = [];
-      const seen = new Set();
+    if (!cards || cards.length === 0) return [];
 
-      cards.forEach((card) => {
-        const course =
-          card.querySelector(".sc-bBXqnf")?.textContent?.trim() ||
-          "Unknown Course";
-        const title =
-          card.querySelector("a.sc-kfzAmx")?.textContent?.trim() || "Untitled";
-        const href = card.querySelector("a.sc-kfzAmx")?.href || null;
+    const tasks = [];
+    const seen = new Set();
 
-        let dueDate = "No Due Date";
-        const dueDiv = card.querySelector(".sc-cxFLnm");
-        if (dueDiv) {
-          const match = dueDiv.textContent.match(
-            /Due\s+([A-Za-z]+\s+\d{1,2}(?:\s+at\s+\d{1,2}:\d{2}\s+[AP]M)?)/i
-          );
-          if (match) dueDate = match[1].trim();
-        }
+    cards.forEach((card) => {
+      // Try different structures since Canvas sometimes changes them
+      const course =
+        card
+          .querySelector(".ic-DashboardCard__header-title")
+          ?.textContent?.trim() ||
+        card
+          .querySelector("[data-testid='planner-context-name']")
+          ?.textContent?.trim() ||
+        "Unknown Course";
 
-        if (course && title && href) {
-          const key = `${course}||${title}||${href}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            data.push({
-              course,
-              assignment: title,
-              href,
-              dueDate,
-              completed: false,
-            });
-          }
-        }
-      });
+      const title =
+        card.querySelector("a.ic-DashboardCard__link")?.textContent?.trim() ||
+        card
+          .querySelector("[data-testid='planner-item-title']")
+          ?.textContent?.trim() ||
+        "Untitled";
 
-      const filteredData = data.filter(
-        (item) => item.assignment !== "None" && !item.completed
-      );
+      const href =
+        card.querySelector("a.ic-DashboardCard__link")?.href ||
+        card.querySelector("a[href*='/assignments/']")?.href ||
+        null;
+
+      const due =
+        card
+          .querySelector(".ic-DashboardCard__header-subtitle")
+          ?.textContent?.trim() ||
+        card
+          .querySelector("[data-testid='planner-item-date']")
+          ?.textContent?.trim() ||
+        "No Due Date";
+
+      if (title && href && !seen.has(href)) {
+        seen.add(href);
+        tasks.push({
+          course,
+          assignment: title,
+          href,
+          dueDate: due,
+          completed: false,
+        });
+      }
+    });
+
+    return tasks;
+  }
+
+  // Run immediately once the page has loaded
+  function update() {
+    const tasks = scrapeTasks();
+    const serialized = JSON.stringify(tasks);
+
+    if (serialized !== lastScrape) {
+      lastScrape = serialized;
+      console.log("QuackTask scraped:", tasks);
+
+      // Send to background for storage
       chrome.runtime.sendMessage(
-        { type: "STORE_SCRAPED_DATA", data: filteredData },
+        { type: "STORE_SCRAPED_DATA", data: tasks },
         () => {
-          console.log("QuackTask Tasks for Canvas data sent:", filteredData);
+          console.log("QuackTask: tasks sent to background.");
         }
       );
     }
-  }, 500);
+  }
+
+  // Observe changes (Canvas dashboard uses React, so we need MutationObserver)
+  const observer = new MutationObserver(() => update());
+  observer.observe(document.body, { childList: true, subtree: true });
+
+  // Periodic backup scrape every few seconds
+  setInterval(update, 5000);
+
+  // First run
+  update();
 })();
