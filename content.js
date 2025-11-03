@@ -1,91 +1,95 @@
+// content.js
 (() => {
-  console.log("QuackTask Listening");
+  console.log("QuackTask: scraping assignments via Canvas API…");
 
-  let lastScrape = "";
+  const fmtDue = (iso) => {
+    if (!iso) return "No Due Date";
+    const d = new Date(iso);
+    const mon = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ][d.getMonth()];
+    const day = d.getDate();
+    let h = d.getHours();
+    const m = d.getMinutes().toString().padStart(2, "0");
+    const ampm = h >= 12 ? "PM" : "AM";
+    h = h % 12 || 12;
+    return `${mon} ${day} at ${h}:${m} ${ampm}`;
+  };
 
-  function scrapeTasks() {
-    const cards = document.querySelectorAll(
-      ".ic-DashboardCard, [data-testid='planner-item']"
-    );
+  const withOrigin = (url) =>
+    url ? (url.startsWith("http") ? url : `${location.origin}${url}`) : null;
 
-    if (!cards || cards.length === 0) return [];
-
-    const tasks = [];
-    const seen = new Set();
-
-    cards.forEach((card) => {
-      // Try different structures since Canvas sometimes changes them
-      const course =
-        card
-          .querySelector(".ic-DashboardCard__header-title")
-          ?.textContent?.trim() ||
-        card
-          .querySelector("[data-testid='planner-context-name']")
-          ?.textContent?.trim() ||
-        "Unknown Course";
-
-      const title =
-        card.querySelector("a.ic-DashboardCard__link")?.textContent?.trim() ||
-        card
-          .querySelector("[data-testid='planner-item-title']")
-          ?.textContent?.trim() ||
-        "Untitled";
-
-      const href =
-        card.querySelector("a.ic-DashboardCard__link")?.href ||
-        card.querySelector("a[href*='/assignments/']")?.href ||
-        null;
-
-      const due =
-        card
-          .querySelector(".ic-DashboardCard__header-subtitle")
-          ?.textContent?.trim() ||
-        card
-          .querySelector("[data-testid='planner-item-date']")
-          ?.textContent?.trim() ||
-        "No Due Date";
-
-      if (title && href && !seen.has(href)) {
-        seen.add(href);
-        tasks.push({
-          course,
-          assignment: title,
-          href,
-          dueDate: due,
-          completed: false,
-        });
+  Promise.all([
+    // All todo items for the logged-in user
+    fetch("/api/v1/users/self/todo?per_page=100", {
+      credentials: "include",
+    }).then((r) => (r.ok ? r.json() : [])),
+    // Course names for nice labels (optional, but helps build "Course → Assignment")
+    fetch("/api/v1/courses?enrollment_state=active&per_page=100", {
+      credentials: "include",
+    })
+      .then((r) => (r.ok ? r.json() : []))
+      .catch(() => []),
+  ])
+    .then(([todos, courses]) => {
+      const courseNameById = {};
+      for (const c of courses || []) {
+        courseNameById[c.id] = c.name || c.course_code || `Course ${c.id}`;
       }
-    });
 
-    return tasks;
-  }
+      const tasks = [];
+      const seen = new Set();
 
-  // Run immediately once the page has loaded
-  function update() {
-    const tasks = scrapeTasks();
-    const serialized = JSON.stringify(tasks);
+      for (const t of todos || []) {
+        // Canvas returns a mix; we care about assignments
+        const a = t.assignment || t;
+        const title = a.name || t.title;
+        const url = withOrigin(a.html_url || t.html_url || t.url);
 
-    if (serialized !== lastScrape) {
-      lastScrape = serialized;
-      console.log("QuackTask scraped:", tasks);
+        // Try to get a course id from either the object or the URL
+        let courseId = a.course_id || t.course_id;
+        if (!courseId && url) {
+          const m = url.match(/\/courses\/(\d+)\//);
+          if (m) courseId = Number(m[1]);
+        }
+        const course = courseNameById[courseId] || `Course ${courseId ?? "?"}`;
 
-      // Send to background for storage
+        const dueISO = a.due_at || t.due;
+        const dueText = fmtDue(dueISO);
+
+        if (title && url) {
+          const key = `${course}||${title}||${url}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            tasks.push({
+              course,
+              assignment: title,
+              href: url,
+              dueDate: dueText, // your popup parses this string
+              completed: false,
+            });
+          }
+        }
+      }
+
+      console.log("QuackTask assignments scraped from Canvas API:", tasks);
       chrome.runtime.sendMessage(
         { type: "STORE_SCRAPED_DATA", data: tasks },
-        () => {
-          console.log("QuackTask: tasks sent to background.");
-        }
+        () => console.log("QuackTask: tasks saved to storage.")
       );
-    }
-  }
-
-  // Observe changes (Canvas dashboard uses React, so we need MutationObserver)
-  const observer = new MutationObserver(() => update());
-  observer.observe(document.body, { childList: true, subtree: true });
-
-  // Periodic backup scrape every few seconds
-  setInterval(update, 5000);
-
-  // First run
-  update();
+    })
+    .catch((err) => {
+      console.warn("QuackTask: Canvas API scrape failed:", err);
+    });
 })();

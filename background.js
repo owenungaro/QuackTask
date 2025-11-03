@@ -46,7 +46,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Add near other chrome.runtime.onMessage cases
   if (message.type === "ADD_BLACKLIST") {
     chrome.storage.local.get({ blacklist: [] }, (result) => {
-      const updated = [...new Set([...result.blacklist, message.assignment])];
+      const updated = Array.from(
+        new Set([...(result.blacklist || []), message.assignment])
+      );
+
       chrome.storage.local.set({ blacklist: updated }, () => {
         console.log("Added to blacklist:", message.assignment);
       });
