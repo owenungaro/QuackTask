@@ -1,0 +1,351 @@
+/* QuackTask Canvas Sidebar — embedded inside Canvas right sidebar */
+#quacktask-sidebar {
+  position: static;
+  width: 100%;
+  max-width: 100%;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  margin: 8px 0 16px;
+  font: inherit;
+
+  /* NEW: keep the widget from growing forever */
+  display: flex;
+  flex-direction: column;
+  /* pick a cap that looks good in Canvas; adjust if you like */
+  max-height: 72vh;
+  overflow: hidden; /* prevent the outer box from stretching the page */
+  transition: box-shadow 0.2s ease-out;
+}
+
+#quacktask-sidebar:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+#quacktask-sidebar header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #ffffff;
+  gap: 8px;
+  flex-wrap: wrap;
+  /* header should never scroll */
+  flex: 0 0 auto;
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+}
+
+#quacktask-sidebar h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #9d1535;
+  letter-spacing: -0.2px;
+}
+
+/* Scrollable content area */
+#quacktask-body {
+  padding: 12px 14px;
+  flex: 1 1 auto; /* take remaining space */
+  overflow-y: auto; /* NEW: scroll here */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  background: #ffffff;
+}
+
+/* Optional: subtle scrollbar styling */
+#quacktask-body::-webkit-scrollbar {
+  width: 8px;
+}
+#quacktask-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+#quacktask-body::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
+}
+#quacktask-body::-webkit-scrollbar-thumb:hover {
+  background: #9d1535;
+}
+
+.qtask-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  background: #ffffff;
+  transition: all 0.25s ease-out;
+}
+
+.qtask-row:hover {
+  border-color: #9d1535;
+  background: #fef9fa;
+  box-shadow: 0 2px 4px rgba(157, 21, 53, 0.08);
+}
+
+.qtask-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 3px;
+  line-height: 1.4;
+}
+
+.qtask-title a {
+  color: #111827;
+  text-decoration: none;
+  transition: color 0.2s ease-out;
+}
+
+.qtask-title a:hover {
+  color: #9d1535;
+}
+
+.qtask-subtle {
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.qtask-actions {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  padding-top: 2px;
+}
+
+.qtask-btn {
+  appearance: none;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease-out;
+  white-space: nowrap;
+}
+
+.qtask-btn:hover {
+  opacity: 0.9;
+}
+
+.qtask-btn:active {
+  opacity: 0.8;
+}
+
+.qtask-add {
+  background: #9d1535;
+  color: #fff;
+}
+
+.qtask-add:hover {
+  background: #8a122f;
+}
+
+.qtask-del {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.qtask-del:hover {
+  background: #e5e7eb;
+}
+
+.qtask-hide {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  color: #6b7280;
+}
+
+.qtask-hide:hover {
+  background: #f9fafb;
+  border-color: #9d1535;
+  color: #9d1535;
+}
+
+.qtask-topbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.qtask-select {
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #ffffff;
+  font-size: 12px;
+  font-weight: 400;
+  color: #111827;
+  cursor: pointer;
+  transition: all 0.2s ease-out;
+}
+
+.qtask-select:hover {
+  border-color: #9d1535;
+}
+
+.qtask-select:focus {
+  outline: none;
+  border-color: #9d1535;
+  box-shadow: 0 0 0 2px rgba(157, 21, 53, 0.1);
+}
+
+.qtask-note {
+  font-size: 11px;
+  color: #6b7280;
+  padding: 8px 12px;
+}
+.qtask-empty {
+  padding: 20px 12px;
+  color: #6b7280;
+  font-size: 13px;
+  text-align: center;
+}
+
+/* ---------- Blacklist popup (draggable) ---------- */
+#qt-bl-popup {
+  position: fixed;
+  top: 120px;
+  right: 24px;
+  width: 380px;
+  max-width: 92vw;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.16);
+  z-index: 2147483647;
+  user-select: none;
+  display: none;
+}
+
+#qt-bl-popup.qt-open {
+  display: block;
+}
+
+#qt-bl-head {
+  cursor: move;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #e5e7eb;
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+  background: #ffffff;
+}
+
+#qt-bl-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+}
+
+#qt-bl-close {
+  border: none;
+  background: #f3f4f6;
+  color: #374151;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease-out;
+}
+#qt-bl-close:hover {
+  background: #e5e7eb;
+}
+
+#qt-bl-body {
+  padding: 10px 12px 12px;
+  user-select: text;
+}
+
+#qt-bl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 360px;
+  overflow: auto;
+}
+
+.qt-bl-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  transition: all 0.2s ease-out;
+}
+
+.qt-bl-item:hover {
+  border-color: #9d1535;
+  background: #fef9fa;
+}
+
+.qt-bl-name {
+  font-size: 12px;
+  color: #111827;
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.qt-bl-remove {
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #f3f4f6;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.2s ease-out;
+}
+.qt-bl-remove:hover {
+  background: #e5e7eb;
+}
+
+.qtask-btn[disabled] {
+  opacity: 0.5;
+  pointer-events: none;
+  cursor: default;
+}
+
+/* Smaller viewports: cap a bit lower */
+@media (max-height: 800px) {
+  #quacktask-sidebar {
+    max-height: 64vh;
+  }
+}
+
+/* Controls wrapper (selector row + actions row) */
+.qtask-controls {
+  padding: 12px 14px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #ffffff;
+}
+
+/* Folder selector row */
+.qt-select-row {
+  margin-bottom: 8px; /* puts buttons below the selector */
+}
+
+/* Actions row: blacklist + logout */
+.qt-actions-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}

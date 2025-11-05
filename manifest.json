@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "QuackTask",
-  "version": "1.4",
+  "version": "1.5.0",
   "description": "Sync your Canvas tasks with Google Tasks to stay organized and on top of your assignments effortlessly.",
   "permissions": ["scripting", "activeTab", "storage", "identity"],
   "host_permissions": [
@@ -9,30 +9,30 @@
     "https://www.googleapis.com/*"
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "src/background/index.js",
+    "type": "module"
   },
   "action": {
-    "default_popup": "popup.html",
-    "default_width": 260,
-    "default_height": 320
+    "default_title": "QuackTask"
   },
-  "icons": {
-    "16": "images/quacktasklogo_16x.png",
-    "32": "images/quacktasklogo_32x.png",
-    "48": "images/quacktasklogo_48x.png",
-    "128": "images/quacktasklogo_128x.png"
-  },
-  "web_accessible_resources": [
-    {
-      "resources": ["popup.js", "auth.js", "assignments.js", "ui.js"],
-      "matches": ["<all_urls>"]
-    }
-  ],
-
   "content_scripts": [
     {
       "matches": ["https://sit.instructure.com/*"],
-      "js": ["content.js"]
+      "js": ["src/content/content.js", "src/content/sidebar.js"],
+      "css": ["src/styles/sidebar.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "assets/icons/quacktask_16.png",
+    "32": "assets/icons/quacktask_32.png",
+    "48": "assets/icons/quacktask_48.png",
+    "128": "assets/icons/quacktask_128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [],
+      "matches": ["<all_urls>"]
     }
   ],
   "oauth2": {
