@@ -180,13 +180,35 @@
         sel.appendChild(opt);
       }
 
-      chrome.storage.local.get({ qt_selected_list: lists[0].id }, (st) => {
-        if (st.qt_selected_list) sel.value = st.qt_selected_list;
+      // choose saved or default to first, then persist it
+      chrome.storage.local.get({ qt_selected_list: null }, (st) => {
+        const chosen = st.qt_selected_list || (lists[0] && lists[0].id);
+        if (chosen) {
+          sel.value = chosen;
+          chrome.storage.local.set({ qt_selected_list: chosen });
+        }
       });
 
-      sel.addEventListener("change", () => {
+      sel.addEventListener("change", async () => {
         chrome.storage.local.set({ qt_selected_list: sel.value });
+        // Sync when list changes
+        try {
+          await sendBg({ type: "SYNC_WITH_GOOGLE_TASKS" });
+          renderFromStorage(); // Refresh the display
+        } catch (e) {
+          LOG("Sync after list change failed:", e);
+        }
       });
+
+      // Trigger initial sync if authed
+      if (lists.length > 0) {
+        try {
+          await sendBg({ type: "SYNC_WITH_GOOGLE_TASKS" });
+          renderFromStorage();
+        } catch (e) {
+          LOG("Initial sync failed:", e);
+        }
+      }
 
       return true;
     } catch (e) {
@@ -322,6 +344,26 @@
         row
           .querySelector("[data-act='hide']")
           .addEventListener("click", onHideClick);
+      } else {
+        LOG("delete failed:", resp?.error || "Unknown error");
+        const errTxt = String(resp?.error || "");
+        // treat not-found or 404/410 as already-deleted
+        if (
+          errTxt.includes("Not found") ||
+          errTxt.includes("404") ||
+          errTxt.includes("410")
+        ) {
+          row.querySelector(
+            ".qtask-actions"
+          ).innerHTML = `<button class="qtask-btn qtask-add" data-act="add">Add</button>
+             <button class="qtask-btn qtask-hide" data-act="hide">Hide</button>`;
+          row
+            .querySelector("[data-act='add']")
+            .addEventListener("click", onAddClick);
+          row
+            .querySelector("[data-act='hide']")
+            .addEventListener("click", onHideClick);
+        }
       }
     } catch (err) {
       LOG("delete error", err);
@@ -353,7 +395,7 @@
     overlay.id = BL_OVERLAY_ID;
     overlay.style.cssText = `
       position: fixed; inset: 0; z-index: 2147483646;
-      background: rgba(17,24,39,0.2);
+      background: rgba(17,24,39,0.28);
       display: none;
     `;
 
@@ -365,16 +407,16 @@
       width: min(480px, 92vw);
       max-height: 70vh; overflow: auto;
       background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.25);
       user-select: none;
     `;
 
     panel.innerHTML = `
-      <div id="${BL_HEAD_ID}" style="cursor:move; display:flex; align-items:center; justify-content:space-between; gap:8px; padding:12px 14px; border-bottom:1px solid #e5e7eb; background:#ffffff; border-top-left-radius:12px; border-top-right-radius:12px;">
-        <h4 style="margin:0; font-size:14px; font-weight:600; color:#111827;">Hidden (Blacklist)</h4>
+      <div id="${BL_HEAD_ID}" style="cursor:move; display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; border-bottom:1px solid #eee; background:#fafafa; border-top-left-radius:12px; border-top-right-radius:12px;">
+        <h4 style="margin:0; font-size:13px; font-weight:800; color:#111827;">Hidden (Blacklist)</h4>
         <button type="button" id="qt-bl-close" class="qtask-btn qtask-del">Close</button>
       </div>
-      <div style="padding:12px 14px;">
+      <div style="padding:10px 12px 12px;">
         <div id="${BL_LIST_ID}" style="display:flex; flex-direction:column; gap:8px;"></div>
       </div>
     `;
@@ -382,14 +424,12 @@
     overlay.appendChild(panel);
     document.documentElement.appendChild(overlay);
 
-    // Close overlay
     overlay.addEventListener("click", (e) => {
       if (e.target === overlay || e.target.id === "qt-bl-close") {
         overlay.style.display = "none";
       }
     });
 
-    // Drag panel by header
     makeDraggable(panel, $("#" + BL_HEAD_ID, panel));
 
     return overlay;
@@ -419,8 +459,8 @@
       list.innerHTML = items
         .map(
           (name) => `
-          <div class="qt-bl-item" style="display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center; padding:10px 12px; border:1px solid #e5e7eb; border-radius:8px; background:#ffffff;">
-            <div class="qt-bl-name" style="font-size:12px; color:#111827; font-weight:500; word-break:break-word;">${escapeHtml(
+          <div class="qt-bl-item" style="display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center; padding:8px 10px; border:1px solid #eee; border-radius:10px; background:#fafafa;">
+            <div class="qt-bl-name" style="font-size:12px; color:#111827; font-weight:600; word-break:break-word;">${escapeHtml(
               name
             )}</div>
             <button class="qtask-btn qtask-del" data-name="${escapeHtml(
@@ -456,7 +496,6 @@
 
     const onDown = (e) => {
       dragging = true;
-      // switch from translate to absolute numbers once we start dragging
       const rect = panel.getBoundingClientRect();
       panel.style.transform = "none";
       panel.style.left = `${rect.left}px`;
@@ -505,7 +544,6 @@
       if (area !== "local") return;
       if (changes.qt_tasks || changes.scrapedData || changes.qt_blacklist) {
         renderFromStorage();
-        // keep overlay list in sync if open
         const overlay = document.getElementById(BL_OVERLAY_ID);
         if (overlay && overlay.style.display === "block") {
           renderBlacklistList();
@@ -521,6 +559,8 @@
     if (!parent) return;
     mountShell(parent);
     renderFromStorage();
+    // ensure we always refresh from Google after mount
+    sendBg({ type: "SYNC_WITH_GOOGLE_TASKS" }).then(() => renderFromStorage());
     watchForRerender();
     watchStorage();
   }

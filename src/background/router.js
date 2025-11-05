@@ -73,7 +73,92 @@ async function unmarkInGoogleAndIndex(key) {
   return { tasks, index };
 }
 
-export async function route(msg) {
+async function getAllGoogleTasks() {
+  // Try without forcing a login prompt
+  const lists = await listTaskLists().catch(() => []);
+  const all = [];
+  for (const l of lists) {
+    try {
+      const items = await getTasksInList(l.id, { showCompleted: true });
+      for (const t of items) {
+        all.push({
+          listId: l.id,
+          id: t.id,
+          title: (t.title || "").trim(),
+          notes: (t.notes || "").trim(),
+          raw: t,
+        });
+      }
+    } catch {
+      // ignore per-list errors
+    }
+  }
+  return all;
+}
+
+async function syncWithGoogleTasks() {
+  const st = await chrome.storage.local.get([
+    "qt_tasks",
+    "scrapedData",
+    "qt_google_index",
+  ]);
+
+  const tasks = Array.isArray(st.qt_tasks)
+    ? st.qt_tasks
+    : Array.isArray(st.scrapedData)
+    ? st.scrapedData
+    : [];
+
+  if (!tasks.length) {
+    await chrome.storage.local.set({ qt_google_index: {} });
+    return { ok: true, synced: 0, found: 0 };
+  }
+
+  let googleItems = [];
+  try {
+    googleItems = await getAllGoogleTasks();
+  } catch {
+    // If we cannot reach Google (not logged in), wipe index flags so UI shows Add
+    for (const t of tasks) {
+      delete t._in_google_tasks;
+      delete t._google_taskId;
+      delete t._google_listId;
+    }
+    await chrome.storage.local.set({ qt_tasks: tasks, qt_google_index: {} });
+    return { ok: true, synced: tasks.length, found: 0, authed: false };
+  }
+
+  const index = {};
+  let found = 0;
+
+  for (const t of tasks) {
+    const key = taskKey(t);
+    const title = (t.assignment || "").trim();
+
+    // Prefer notes match on our key, otherwise fallback to exact title match
+    const hit =
+      googleItems.find((g) => g.notes.includes(key)) ||
+      googleItems.find((g) => g.title === title);
+
+    if (hit) {
+      t._in_google_tasks = true;
+      t._google_taskId = hit.id;
+      t._google_listId = hit.listId;
+      index[key] = { listId: hit.listId, taskId: hit.id };
+      found += 1;
+    } else {
+      delete t._in_google_tasks;
+      delete t._google_taskId;
+      delete t._google_listId;
+      delete index[key];
+    }
+  }
+
+  await chrome.storage.local.set({ qt_tasks: tasks, qt_google_index: index });
+  return { ok: true, synced: tasks.length, found };
+}
+
+export async function route(msg /*, sender */) {
   const log = (...a) => console.log("[QuackTask:bg]", ...a);
 
   switch (msg?.type) {
@@ -95,6 +180,32 @@ export async function route(msg) {
       } catch (e) {
         log("GET_GOOGLE_LISTS error:", e);
         return { success: false, authed: false, lists: [] };
+      }
+    }
+
+    case "STORE_SCRAPED_DATA": {
+      try {
+        const data = Array.isArray(msg?.data) ? msg.data : [];
+        await chrome.storage.local.set({ qt_tasks: data, scrapedData: data });
+        // Kick a background sync so flags are fresh
+        const res = await syncWithGoogleTasks().catch((e) => ({
+          ok: false,
+          error: String(e),
+        }));
+        return { ok: true, synced: res?.synced || 0, found: res?.found || 0 };
+      } catch (e) {
+        log("STORE_SCRAPED_DATA error:", e);
+        return { ok: false, error: String(e) };
+      }
+    }
+
+    case "SYNC_WITH_GOOGLE_TASKS": {
+      try {
+        const res = await syncWithGoogleTasks();
+        return res;
+      } catch (e) {
+        log("SYNC_WITH_GOOGLE_TASKS error:", e);
+        return { ok: false, error: String(e) };
       }
     }
 
@@ -120,7 +231,8 @@ export async function route(msg) {
         const created = await createTask({
           listId,
           title: title || found?.assignment || "Untitled",
-          notes: notes || "",
+          // include the QuackTask key first so sync can rediscover by notes
+          notes: key ? `${key}${notes ? `\n${notes}` : ""}` : notes || "",
           dueRFC3339,
         });
 
@@ -155,7 +267,18 @@ export async function route(msg) {
           return { ok: false, error: "Not found in Google Tasks" };
         }
 
-        await deleteTask(entry.listId, entry.taskId);
+        try {
+          await deleteTask(entry.listId, entry.taskId);
+        } catch (err) {
+          const msgTxt = String(err || "");
+          if (msgTxt.includes("404") || msgTxt.includes("410")) {
+            // already deleted upstream: clean local state
+            await unmarkInGoogleAndIndex(key);
+            return { ok: true, soft: true };
+          }
+          throw err;
+        }
+
         await unmarkInGoogleAndIndex(key);
         return { ok: true };
       } catch (e) {

@@ -1,3 +1,4 @@
+// Service worker entry
 import { route as handleMessage } from "./router.js";
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
