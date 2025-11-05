@@ -49,7 +49,7 @@
         }[c])
     );
 
-  const taskKey = (t) => `${t.course}→${t.assignment}`;
+  const taskKey = (t) => `${t.course || t.courseCode || ""} → ${t.assignment || ""}`;
 
   const greyRowButtons = (row, on) =>
     row.querySelectorAll(".qtask-btn").forEach((b) => (b.disabled = on));
@@ -84,7 +84,7 @@
     parent.prepend(wrap);
     LOG("sidebar boot @", location.href);
 
-    // Make the body scrollable so the page doesn’t grow forever
+    // Make the body scrollable so the page doesn't grow forever
     const body = document.getElementById(BODY_ID);
     if (body) {
       body.style.maxHeight = "60vh";
@@ -239,7 +239,10 @@
           return;
         }
 
-        const visible = tasks.filter((t) => !blacklist.has(taskKey(t)));
+        // Filter out blacklisted items and completed tasks
+        const visible = tasks.filter((t) => {
+          return !blacklist.has(taskKey(t)) && !t._completed_in_google;
+        });
         body.innerHTML =
           visible.map(taskRowHTML).join("") ||
           `<div class="qtask-empty">Nothing to show.</div>`;
@@ -292,8 +295,7 @@
     try {
       const listId = $("#" + SELECT_ID)?.value || null;
       const key = row.dataset.key;
-      const title =
-        row.querySelector(".qtask-title")?.textContent.trim() || "Untitled";
+      // Notes should only be the URL link
       const notes = row.dataset.href
         ? new URL(row.dataset.href, location.origin).href
         : "";
@@ -301,9 +303,8 @@
       const resp = await sendBg({
         type: "ADD_TO_GOOGLE_TASKS",
         listId,
-        title,
-        notes,
-        key,
+        notes, // Only the link
+        key, // The key will be used as the title in the router
       });
       if (resp && resp.ok) {
         row.querySelector(
@@ -379,10 +380,16 @@
 
     try {
       const key = row.dataset.key;
-      await sendBg({ type: "ADD_BLACKLIST", assignment: key });
-      row.remove();
+      const resp = await sendBg({ type: "ADD_BLACKLIST", assignment: key });
+      if (resp && resp.ok) {
+        row.remove();
+      } else {
+        LOG("hide error", resp?.error || "Unknown error");
+      }
     } catch (err) {
       LOG("hide error", err);
+    } finally {
+      greyRowButtons(row, false);
     }
   }
 

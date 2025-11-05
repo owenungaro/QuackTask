@@ -14,34 +14,80 @@
     }
   })();
 
-  // simple gated logger
-  const log = (...args) => console.log(TAG, ...args);
-  const warn = (...args) => console.warn(TAG, ...args);
-  const err = (...args) => console.error(TAG, ...args);
+  const log = (...a) => console.log(TAG, ...a);
+  const warn = (...a) => console.warn(TAG, ...a);
+  const err = (...a) => console.error(TAG, ...a);
 
   if (!HOME_OK) {
     log("Not on Canvas home, skipping scrape. url=", location.href);
     return;
   }
 
-  // Kick off immediately (and again after SPA re-render)
   run().catch((e) => err("initial run() failed:", e));
-  // Canvas re-renders the right rail — try again shortly after load
   setTimeout(() => run().catch((e) => err("delayed run() failed:", e)), 1200);
 
+  // ---------- Extract course name mapping ----------
+  async function extractCourseNameMapping({ waitMs = 1000, tries = 5 } = {}) {
+    for (let i = 0; i < tries; i++) {
+      const cards = document.querySelectorAll(".ic-DashboardCard");
+      if (cards.length) break;
+      await new Promise((r) => setTimeout(r, waitMs));
+    }
+
+    const byId = Object.create(null);
+    const byCode = Object.create(null);
+
+    document.querySelectorAll(".ic-DashboardCard").forEach((card) => {
+      const header = card.querySelector(".ic-DashboardCard__header_content");
+      if (!header) return;
+
+      const codeEl = header.querySelector(
+        'h2[data-testid="dashboard-card-title"]'
+      );
+      const nameEl = header.querySelector(".ic-DashboardCard__header-subtitle");
+      const a = card.querySelector("a[href*='/courses/']");
+
+      const courseCode = (codeEl?.textContent || "").trim();
+      const courseName = (nameEl?.textContent || "").trim();
+
+      if (a) {
+        const m = a.getAttribute("href")?.match(/\/courses\/(\d+)/);
+        if (m) {
+          const cid = m[1];
+          if (courseName) byId[cid] = courseName;
+        }
+      }
+      if (courseCode && courseName) {
+        byCode[courseCode] = courseName;
+      }
+    });
+
+    return { byId, byCode };
+  }
+
+  // ---------- Main scrape ----------
   async function run() {
     log("Scrape start…");
 
-    // 1) Planner API
+    const courseNameMapping = await extractCourseNameMapping();
+    if (
+      Object.keys(courseNameMapping.byId).length ||
+      Object.keys(courseNameMapping.byCode).length
+    ) {
+      log("Course name mapping extracted:", courseNameMapping);
+    }
+
     let planner = [];
     try {
-      planner = await fetchPlannerAssignmentsWindow(14, 90, { verbose: true });
+      planner = await fetchPlannerAssignmentsWindow(14, 90, {
+        verbose: true,
+        courseNameMapping,
+      });
       log("Planner API items total:", planner.length, planner);
     } catch (e) {
       err("Planner API failed:", e);
     }
 
-    // 2) DOM fallback (To-Do list) if planner looks fishy / empty
     let domFallback = [];
     if (planner.length === 0) {
       try {
@@ -55,7 +101,6 @@
     const data = planner.length ? planner : domFallback;
     log("Final scraped set:", data.length);
 
-    // 3) Store in background
     try {
       const res = await chrome.runtime.sendMessage({
         type: "STORE_SCRAPED_DATA",
@@ -71,7 +116,7 @@
   async function fetchPlannerAssignmentsWindow(
     daysBack = 14,
     daysForward = 90,
-    { verbose = false } = {}
+    { verbose = false, courseNameMapping = { byId: {}, byCode: {} } } = {}
   ) {
     const start = new Date();
     start.setDate(start.getDate() - daysBack);
@@ -86,22 +131,43 @@
 
     const items = await getAllPages(base, { verbose });
 
-    if (verbose) log("Planner raw length:", items.length, items.slice(0, 5));
+    if (verbose)
+      log("Planner raw length:", items.length, items.slice(0, 5));
+
+    const filteredOut = [];
+    const keptTasks = [];
 
     const filtered = items.filter((it) => {
-      const keep =
-        it?.plannable_type?.toLowerCase() === "assignment" && !!it?.plannable;
-      if (verbose && !keep) {
-        log("Filtering out non-assignment/plannable:", {
-          type: it?.plannable_type,
-          plannable: !!it?.plannable,
-          title: it?.plannable?.title,
-        });
+      const plannableType = it?.plannable_type?.toLowerCase();
+      const hasPlannable = !!it?.plannable;
+      const isAnnouncement = plannableType === "announcement";
+
+      if (isAnnouncement || !hasPlannable) {
+        if (verbose)
+          filteredOut.push({
+            type: plannableType,
+            title: it?.plannable?.title || "N/A",
+          });
+        return false;
       }
-      return keep;
+
+      if (verbose)
+        keptTasks.push({
+          type: plannableType,
+          title: it?.plannable?.title || "N/A",
+          course: it?.context_name || "N/A",
+        });
+      return true;
     });
 
-    const mapped = filtered.map(mapPlannerToCard);
+    if (verbose && filteredOut.length)
+      log("Filtered out items:", filteredOut);
+    if (verbose && keptTasks.length)
+      log("All kept tasks:", keptTasks);
+
+    const mapped = filtered.map((item) =>
+      mapPlannerToCard(item, courseNameMapping)
+    );
     if (verbose)
       log("Planner mapped length:", mapped.length, mapped.slice(0, 5));
     return mapped;
@@ -120,7 +186,7 @@
       const next = nextFromLink(res.headers.get("link"));
       if (verbose) log(`page ${page} got ${json.length} items; next:`, !!next);
       url = next;
-      page += 1;
+      page++;
     }
     return results;
   }
@@ -135,19 +201,26 @@
     return null;
   }
 
-  function mapPlannerToCard(item) {
+  function mapPlannerToCard(item, courseNameMapping = { byId: {}, byCode: {} }) {
     const p = item.plannable || {};
     const title = (p.title || "").trim();
     const href = absolutize(p.html_url || item.html_url || "");
     const dueISO = p.due_at || item.plannable_date || null;
-    const course =
-      item.context_name ||
-      item.course_name ||
-      fromContextCode(item.context_code) ||
-      "";
+
+    const courseCode = (item.context_name || "").trim();
+    const courseId = (String(item.context_code || "").match(/course_(\d+)/) || [])[1];
+
+    let courseName =
+      (courseId && courseNameMapping.byId[courseId]) ||
+      (courseCode && courseNameMapping.byCode[courseCode]) ||
+      (item.course_name || "").trim();
+
+    if (!courseName)
+      courseName = courseCode || fromContextCode(item.context_code) || "";
 
     return {
-      course: (course || "").trim(),
+      course: courseName,
+      courseCode,
       assignment: title,
       href,
       rfc3339Due: dueISO || null,
@@ -181,14 +254,11 @@
     });
   }
 
-  // Best-effort DOM fallback to the native To-Do list (class names can change)
   function scrapeDomTodo({ verbose = false } = {}) {
     const items = [];
-    // Canvas has used both #planner-todosidebar-item-list and data-testid selectors
     const root =
       document.querySelector("#planner-todosidebar-item-list") ||
       document.querySelector('[data-testid="ToDoSidebar"]');
-
     if (!root) {
       warn("No To-Do DOM root found.");
       return items;
@@ -209,7 +279,6 @@
 
       let course = "";
       let dueText = "No Due Date";
-
       if (card) {
         const courseEl = card.querySelector(
           "[data-testid='todo-sidebar-item-title'] ~ span, .css-79wf76-text"
@@ -225,7 +294,7 @@
         course,
         assignment: title,
         href,
-        rfc3339Due: null, // unknown in DOM fallback
+        rfc3339Due: null,
         dueText,
       });
     });
