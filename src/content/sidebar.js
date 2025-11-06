@@ -23,6 +23,10 @@
   const LOG = (...a) => console.log("[QuackTask]", ...a);
   const $ = (sel, root = document) => root.querySelector(sel);
 
+  // Per-page gate: base state is "loading". We only allow rendering
+  // real content after the first sync returns on THIS page load.
+  let PAGE_GATE_OPEN = false;
+
   /* ---------------------- small utils ---------------------- */
   const onDashboard = () => DASH_URLS.some((u) => location.href === u);
   const rightAside = () => document.getElementById("right-side");
@@ -67,7 +71,8 @@
         <h3>QuackTask</h3>
       </header>
 
-      <div class="qtask-controls">
+      <!-- Controls are hidden in the BASE state; they appear when ready -->
+      <div class="qtask-controls" data-gated="ready" style="display:none">
         <div class="qt-select-row">
           <select id="${SELECT_ID}" class="qtask-select" aria-label="Google Task list"></select>
         </div>
@@ -78,7 +83,8 @@
       </div>
 
       <div id="${BODY_ID}">
-        <div class="qtask-empty">Loading...</div>
+        <!-- BASE state: empty list with loading text -->
+        <div class="qtask-empty">Loading tasks…</div>
       </div>
     `;
 
@@ -109,6 +115,12 @@
       btn.dataset.mode = "login";
       if (sel) sel.disabled = true;
     }
+  }
+
+  // Show/hide the entire controls block (dropdown + buttons) when ready
+  function setReadyUI(ready) {
+    const controls = document.querySelector('[data-gated="ready"]');
+    if (controls) controls.style.display = ready ? "" : "none";
   }
 
   async function wireControls() {
@@ -201,7 +213,7 @@
         }
       });
 
-      // Trigger initial sync if authed
+      // Trigger initial sync if authed (dropdown still hidden until ready)
       if (lists.length > 0) {
         try {
           await sendBg({ type: "SYNC_WITH_GOOGLE_TASKS" });
@@ -226,10 +238,16 @@
     chrome.storage.local.get(
       ["qt_tasks", "scrapedData", "qt_blacklist", "qt_ready"],
       (st) => {
-        // Gate: only render tasks when background says they’re accurate
-        const ready = st.qt_ready === true;
+        // We only show content after:
+        // 1) background says the data is accurate (qt_ready === true), AND
+        // 2) the first sync has returned on THIS page load (PAGE_GATE_OPEN)
+        const ready = st.qt_ready === true && PAGE_GATE_OPEN;
+
+        // Toggle controls visibility with the same gate
+        setReadyUI(ready);
+
         if (!ready) {
-          body.innerHTML = `<div class="qtask-empty">Updating tasks…</div>`;
+          body.innerHTML = `<div class="qtask-empty">Loading tasks…</div>`;
           return;
         }
 
@@ -563,6 +581,7 @@
         changes.scrapedData ||
         changes.qt_blacklist
       ) {
+        // We recompute "ready" inside renderFromStorage, which also toggles controls
         renderFromStorage();
         const overlay = document.getElementById(BL_OVERLAY_ID);
         if (overlay && overlay.style.display === "block") {
@@ -577,10 +596,17 @@
     if (!onDashboard()) return;
     const parent = rightAside();
     if (!parent) return;
+
+    PAGE_GATE_OPEN = false; // base state - prevents any flash of stale tasks
     mountShell(parent);
     renderFromStorage();
-    // ensure we always refresh from Google after mount
-    sendBg({ type: "SYNC_WITH_GOOGLE_TASKS" }).then(() => renderFromStorage());
+
+    // Kick off a fresh sync - when it returns, open the page gate and render once
+    sendBg({ type: "SYNC_WITH_GOOGLE_TASKS" }).then(() => {
+      PAGE_GATE_OPEN = true;
+      renderFromStorage();
+    });
+
     watchForRerender();
     watchStorage();
   }
