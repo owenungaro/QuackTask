@@ -131,8 +131,7 @@
 
     const items = await getAllPages(base, { verbose });
 
-    if (verbose)
-      log("Planner raw length:", items.length, items.slice(0, 5));
+    if (verbose) log("Planner raw length:", items.length, items.slice(0, 5));
 
     const filteredOut = [];
     const keptTasks = [];
@@ -160,10 +159,8 @@
       return true;
     });
 
-    if (verbose && filteredOut.length)
-      log("Filtered out items:", filteredOut);
-    if (verbose && keptTasks.length)
-      log("All kept tasks:", keptTasks);
+    if (verbose && filteredOut.length) log("Filtered out items:", filteredOut);
+    if (verbose && keptTasks.length) log("All kept tasks:", keptTasks);
 
     const mapped = filtered.map((item) =>
       mapPlannerToCard(item, courseNameMapping)
@@ -201,14 +198,18 @@
     return null;
   }
 
-  function mapPlannerToCard(item, courseNameMapping = { byId: {}, byCode: {} }) {
+  function mapPlannerToCard(
+    item,
+    courseNameMapping = { byId: {}, byCode: {} }
+  ) {
     const p = item.plannable || {};
     const title = (p.title || "").trim();
     const href = absolutize(p.html_url || item.html_url || "");
     const dueISO = p.due_at || item.plannable_date || null;
 
     const courseCode = (item.context_name || "").trim();
-    const courseId = (String(item.context_code || "").match(/course_(\d+)/) || [])[1];
+    const courseId = (String(item.context_code || "").match(/course_(\d+)/) ||
+      [])[1];
 
     let courseName =
       (courseId && courseNameMapping.byId[courseId]) ||

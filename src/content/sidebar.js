@@ -49,7 +49,8 @@
         }[c])
     );
 
-  const taskKey = (t) => `${t.course || t.courseCode || ""} → ${t.assignment || ""}`;
+  const taskKey = (t) =>
+    `${t.course || t.courseCode || ""} → ${t.assignment || ""}`;
 
   const greyRowButtons = (row, on) =>
     row.querySelectorAll(".qtask-btn").forEach((b) => (b.disabled = on));

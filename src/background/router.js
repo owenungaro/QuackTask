@@ -8,7 +8,8 @@ import {
 import { ensureTokenInteractive, clearAuth } from "./auth.js";
 
 // Keys
-const nameKeyOf = (t) => `${t.course || t.courseCode || ""} → ${t.assignment || ""}`;
+const nameKeyOf = (t) =>
+  `${t.course || t.courseCode || ""} → ${t.assignment || ""}`;
 const codeKeyOf = (t) =>
   t && t.courseCode ? `${t.courseCode} → ${t.assignment || ""}` : null;
 
@@ -18,9 +19,34 @@ async function getSelectedListId() {
   return st.qt_selected_list;
 }
 
+// Produce a local calendar-date RFC3339 (time ignored by Google Tasks, but date stays correct)
+function toLocalDateOnlyRFC3339(iso) {
+  try {
+    const d = new Date(iso);
+    if (isNaN(d)) return undefined;
+    const pad = (n) => String(n).padStart(2, "0");
+    const y = d.getFullYear();
+    const m = pad(d.getMonth() + 1);
+    const day = pad(d.getDate());
+    const off = d.getTimezoneOffset(); // minutes to add to LOCAL to get UTC
+    const sign = off > 0 ? "-" : "+";
+    const a = Math.abs(off);
+    const oh = pad(Math.floor(a / 60));
+    const om = pad(a % 60);
+    // Time is ignored by Google Tasks anyway; we send local midnight to lock the *date*
+    return `${y}-${m}-${day}T00:00:00${sign}${oh}:${om}`;
+  } catch {
+    return undefined;
+  }
+}
+
 // Mark present in Google + index (active only)
 async function markInGoogleAndIndex(key, listId, taskId) {
-  const st = await chrome.storage.local.get(["qt_tasks", "scrapedData", "qt_google_index"]);
+  const st = await chrome.storage.local.get([
+    "qt_tasks",
+    "scrapedData",
+    "qt_google_index",
+  ]);
   const tasks = Array.isArray(st.qt_tasks)
     ? st.qt_tasks
     : Array.isArray(st.scrapedData)
@@ -45,7 +71,11 @@ async function markInGoogleAndIndex(key, listId, taskId) {
 
 // Unmark from Google + index
 async function unmarkInGoogleAndIndex(key) {
-  const st = await chrome.storage.local.get(["qt_tasks", "scrapedData", "qt_google_index"]);
+  const st = await chrome.storage.local.get([
+    "qt_tasks",
+    "scrapedData",
+    "qt_google_index",
+  ]);
   const tasks = Array.isArray(st.qt_tasks)
     ? st.qt_tasks
     : Array.isArray(st.scrapedData)
@@ -84,14 +114,20 @@ async function getAllGoogleTasksWithStatus() {
           status: (t.status || "needsAction").toLowerCase(), // "completed" or "needsaction"
         });
       }
-    } catch { /* ignore per-list errors */ }
+    } catch {
+      /* ignore per-list errors */
+    }
   }
   return all;
 }
 
 // Reconcile local Canvas tasks with Google
 async function syncWithGoogleTasks() {
-  const st = await chrome.storage.local.get(["qt_tasks", "scrapedData", "qt_google_index"]);
+  const st = await chrome.storage.local.get([
+    "qt_tasks",
+    "scrapedData",
+    "qt_google_index",
+  ]);
   const tasks = Array.isArray(st.qt_tasks)
     ? st.qt_tasks
     : Array.isArray(st.scrapedData)
@@ -127,13 +163,16 @@ async function syncWithGoogleTasks() {
     const href = (t.href || "").trim();
 
     // helper: does notes contain our Canvas link?
-    const notesMatch = (gi) => href && gi.notes && gi.notes.indexOf(href) !== -1;
+    const notesMatch = (gi) =>
+      href && gi.notes && gi.notes.indexOf(href) !== -1;
 
     // Active match (incomplete only)
     const hitActive = googleItems.find(
       (g) =>
         g.status !== "completed" &&
-        (g.title === nameKey || (codeKey && g.title === codeKey) || notesMatch(g))
+        (g.title === nameKey ||
+          (codeKey && g.title === codeKey) ||
+          notesMatch(g))
     );
 
     // Completed match
@@ -141,7 +180,9 @@ async function syncWithGoogleTasks() {
       ? googleItems.find(
           (g) =>
             g.status === "completed" &&
-            (g.title === nameKey || (codeKey && g.title === codeKey) || notesMatch(g))
+            (g.title === nameKey ||
+              (codeKey && g.title === codeKey) ||
+              notesMatch(g))
         )
       : null;
 
@@ -153,7 +194,11 @@ async function syncWithGoogleTasks() {
 
       // store whichever title matched
       const matchedKey =
-        hitActive.title === nameKey ? nameKey : (hitActive.title === codeKey ? codeKey : nameKey);
+        hitActive.title === nameKey
+          ? nameKey
+          : hitActive.title === codeKey
+          ? codeKey
+          : nameKey;
       index[matchedKey] = { listId: hitActive.listId, taskId: hitActive.id };
       found++;
     } else if (hitCompleted) {
@@ -236,17 +281,19 @@ export async function route(msg) {
           : Array.isArray(st.scrapedData)
           ? st.scrapedData
           : [];
-        const found = tasks.find((t) => nameKeyOf(t) === key || codeKeyOf(t) === key);
+        const found = tasks.find(
+          (t) => nameKeyOf(t) === key || codeKeyOf(t) === key
+        );
         const dueRFC3339 =
           found?.rfc3339Due && typeof found.rfc3339Due === "string"
-            ? found.rfc3339Due
+            ? toLocalDateOnlyRFC3339(found.rfc3339Due) // ensures the *day* is correct; Tasks ignores time
             : undefined;
 
         const created = await createTask({
           listId,
-          title: key || "Untitled",        // Title is the key
-          notes: notes || "",               // Notes should be the Canvas URL
-          dueRFC3339,                       // ✅ put date back
+          title: key || "Untitled", // Title is the key
+          notes: notes || "", // Notes should be the Canvas URL
+          dueRFC3339, // ✅ put date back
         });
 
         await markInGoogleAndIndex(key, listId, created.id);
