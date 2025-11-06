@@ -224,8 +224,15 @@
     if (!body) return;
 
     chrome.storage.local.get(
-      ["qt_tasks", "scrapedData", "qt_blacklist"],
+      ["qt_tasks", "scrapedData", "qt_blacklist", "qt_ready"],
       (st) => {
+        // Gate: only render tasks when background says they’re accurate
+        const ready = st.qt_ready === true;
+        if (!ready) {
+          body.innerHTML = `<div class="qtask-empty">Updating tasks…</div>`;
+          return;
+        }
+
         const tasks = Array.isArray(st.qt_tasks)
           ? st.qt_tasks
           : Array.isArray(st.scrapedData)
@@ -550,7 +557,12 @@
   function watchStorage() {
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== "local") return;
-      if (changes.qt_tasks || changes.scrapedData || changes.qt_blacklist) {
+      if (
+        changes.qt_ready ||
+        changes.qt_tasks ||
+        changes.scrapedData ||
+        changes.qt_blacklist
+      ) {
         renderFromStorage();
         const overlay = document.getElementById(BL_OVERLAY_ID);
         if (overlay && overlay.style.display === "block") {

@@ -246,19 +246,30 @@ export async function route(msg) {
         return { success: false, authed: false, lists: [] };
       }
 
-    case "STORE_SCRAPED_DATA":
+    case "STORE_SCRAPED_DATA": {
       try {
         const data = Array.isArray(msg?.data) ? msg.data : [];
-        await chrome.storage.local.set({ qt_tasks: data, scrapedData: data });
-        const res = await syncWithGoogleTasks().catch((e) => ({
-          ok: false,
-          error: String(e),
-        }));
+
+        // 1) Save only the raw scrape and mark UI as not-ready
+        await chrome.storage.local.set({ scrapedData: data, qt_ready: false });
+
+        // 2) Reconcile with Google (adds flags like _in_google_tasks / _completed_in_google)
+        let res;
+        try {
+          res = await syncWithGoogleTasks();
+        } catch (e) {
+          res = { ok: false, error: String(e) };
+        } finally {
+          // 3) Mark ready so the UI renders once with accurate data
+          await chrome.storage.local.set({ qt_ready: true });
+        }
+
         return { ok: true, synced: res?.synced || 0, found: res?.found || 0 };
       } catch (e) {
         log("STORE_SCRAPED_DATA error:", e);
         return { ok: false, error: String(e) };
       }
+    }
 
     case "SYNC_WITH_GOOGLE_TASKS":
       try {
