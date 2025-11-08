@@ -23,6 +23,328 @@
   const LOG = (...a) => console.log("[QuackTask]", ...a);
   const $ = (sel, root = document) => root.querySelector(sel);
 
+  /* ---------------------- theme engine ---------------------- */
+  function hexToRgb(hex) {
+    const c = hex.replace('#', '');
+    return [parseInt(c.slice(0, 2), 16), parseInt(c.slice(2, 4), 16), parseInt(c.slice(4, 6), 16)];
+  }
+
+  function parseColorToRgb(color) {
+    if (!color) return null;
+    color = color.trim();
+    
+    // Handle hex
+    if (color.startsWith('#')) {
+      if (color.length >= 7) {
+        return hexToRgb(color);
+      }
+      return null;
+    }
+    
+    // Handle rgb/rgba
+    const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    if (match) {
+      return [parseInt(match[1]), parseInt(match[2]), parseInt(match[3])];
+    }
+    
+    return null;
+  }
+
+  function luminance([r, g, b]) {
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
+
+  function clamp(n, min, max) {
+    return Math.max(min, Math.min(max, n));
+  }
+
+  function mix(a, b, t) {
+    return Math.round(a + (b - a) * t);
+  }
+
+  function lighten(color, t = 0.08) {
+    const rgb = parseColorToRgb(color);
+    if (!rgb) return color;
+    const [r, g, b] = rgb;
+    return `#${[mix(r, 255, t), mix(g, 255, t), mix(b, 255, t)].map(x => x.toString(16).padStart(2, '0')).join('')}`;
+  }
+
+  function darken(color, t = 0.08) {
+    const rgb = parseColorToRgb(color);
+    if (!rgb) return color;
+    const [r, g, b] = rgb;
+    return `#${[mix(r, 0, t), mix(g, 0, t), mix(b, 0, t)].map(x => x.toString(16).padStart(2, '0')).join('')}`;
+  }
+
+  function getCssVar(el, name) {
+    return getComputedStyle(el).getPropertyValue(name)?.trim();
+  }
+
+  function firstColor(value) {
+    if (!value) return null;
+    const hex = value.match(/#[0-9a-fA-F]{6}/);
+    if (hex) return hex[0];
+    const rgb = value.match(/rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+/);
+    return rgb ? rgb[0] + ')' : null;
+  }
+
+  // Signature for the built-in BetterCanvas Dark preset (normalized to lowercase)
+  const BC_DARK_PRESET = {
+    '--bcbackground-0': '#161616',
+    '--bcbackground-1': '#1e1e1e',
+    '--bcbackground-2': '#262626',
+    '--bcborders': '#3c3c3c',
+    '--bcbuttons': '#3c3c3c',
+    '--bclinks': '#56caf0',
+    '--bctext-0': '#f5f5f5',
+    '--bctext-1': '#e2e2e2'
+  };
+
+  // Read & normalize a CSS var
+  function readVar(el, name) {
+    return getComputedStyle(el).getPropertyValue(name).trim().toLowerCase();
+  }
+
+  // True only for the built-in BetterCanvas Dark preset
+  function isBuiltInBcDark() {
+    // Must be a BetterCanvas page
+    if (!document.getElementById('bettercanvas-theme-preset')) return false;
+
+    const el = document.body;
+    // Anchor keys are enough; avoid overfitting
+    const keys = [
+      '--bcbackground-0', '--bcbackground-1', '--bcbackground-2',
+      '--bcborders', '--bcbuttons', '--bclinks', '--bctext-0', '--bctext-1'
+    ];
+    return keys.every(k => {
+      const actual = readVar(el, k);
+      const expected = BC_DARK_PRESET[k];
+      return actual && expected && actual === expected;
+    });
+  }
+
+  function detectBetterCanvas() {
+    const s = getComputedStyle(document.body);
+    const bg0 = s.getPropertyValue('--bcbackground-0-ungradient')?.trim();
+    const t0 = s.getPropertyValue('--bctext-0')?.trim();
+    const link = s.getPropertyValue('--bclinks')?.trim();
+    return { bg0, t0, link, has: !!(bg0 || t0 || link) };
+  }
+
+  function isDarkByText(color) {
+    const rgb = parseColorToRgb(color);
+    if (!rgb) return false;
+    // If text is light (high luminance), background is dark (dark theme)
+    return luminance(rgb) > 160;
+  }
+
+  function copyTokensToOverlay(sidebar, overlay) {
+    if (!sidebar || !overlay) return;
+    const computed = getComputedStyle(sidebar);
+    const tokens = [
+      '--qt-surface', '--qt-border', '--qt-text', '--qt-subtle', '--qt-accent',
+      '--qt-accent-contrast', '--qt-row-hover', '--qt-shadow', '--qt-scrim',
+      '--qt-btn-bg', '--qt-btn-bg-hover', '--qt-btn-text', '--qt-btn-border',
+      '--qt-add-bg', '--qt-add-bg-hover', '--qt-add-text',
+      '--qt-dd-bg', '--qt-dd-text', '--qt-scroll-thumb', '--qt-scroll-thumb-hover'
+    ];
+    tokens.forEach(token => {
+      const value = computed.getPropertyValue(token);
+      if (value) {
+        overlay.style.setProperty(token, value);
+        const panel = document.getElementById(BL_PANEL_ID);
+        if (panel) panel.style.setProperty(token, value);
+      }
+    });
+    
+    // Ensure accent tokens are explicitly copied for overlay (Close button and header)
+    const accentTokens = ['--qt-assignment-name', '--qt-accent', '--qt-add-bg', '--qt-add-bg-hover'];
+    accentTokens.forEach(token => {
+      const value = computed.getPropertyValue(token);
+      if (value) {
+        overlay.style.setProperty(token, value);
+        const panel = document.getElementById(BL_PANEL_ID);
+        if (panel) panel.style.setProperty(token, value);
+      }
+    });
+  }
+
+  function detectDarkModeFallback() {
+    // Try multiple methods to detect dark mode
+    const body = document.body;
+    const html = document.documentElement;
+    
+    // Method 1: Check computed background color
+    try {
+      const bodyBg = getComputedStyle(body).backgroundColor;
+      if (bodyBg && bodyBg !== 'rgba(0, 0, 0, 0)' && bodyBg !== 'transparent') {
+        const rgb = parseColorToRgb(bodyBg);
+        if (rgb) {
+          const L = luminance(rgb);
+          if (L < 150) return true;
+          if (L > 200) return false;
+        }
+      }
+    } catch (e) {}
+    
+    // Method 2: Check html background
+    try {
+      const htmlBg = getComputedStyle(html).backgroundColor;
+      if (htmlBg && htmlBg !== 'rgba(0, 0, 0, 0)' && htmlBg !== 'transparent') {
+        const rgb = parseColorToRgb(htmlBg);
+        if (rgb) {
+          const L = luminance(rgb);
+          if (L < 150) return true;
+          if (L > 200) return false;
+        }
+      }
+    } catch (e) {}
+    
+    // Method 3: Check if body/html has dark class or data attribute
+    if (body.classList.contains('dark') || html.classList.contains('dark')) return true;
+    if (body.dataset.theme === 'dark' || html.dataset.theme === 'dark') return true;
+    
+    // Method 4: Check color scheme media query
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      return true;
+    }
+    
+    // Default to light
+    return false;
+  }
+
+  function applyTokens(root) {
+    const el = root || document.getElementById(WIDGET_ID);
+    if (!el) {
+      LOG("applyTokens: element not found");
+      return;
+    }
+    
+    const bc = detectBetterCanvas();
+    LOG("applyTokens: BetterCanvas detected:", bc.has, bc);
+
+    const MAROON = '#9D1535';
+    const SURF_LIGHT = '#ffffff';
+    const SURF_DARK = '#1f2937'; // neutral dark surface fallback
+    const BORDER_L = '#e5e7eb';
+    const BORDER_D = '#2d3748';
+    const TEXT_L = '#111827';
+    const TEXT_D = '#e5e7eb';
+    const SUB_L = '#6b7280';
+    const SUB_D = '#a3a3a3';
+
+    let surface, text, subtle, accent, ddBg, ddText, border, scrim, shadow;
+
+    if (bc.has) {
+      // BetterCanvas mapping
+      const bcBg0 = bc.bg0; // --bcbackground-0-ungradient
+      const bcBg = getCssVar(document.body, '--bcbackground-0'); // may be a gradient
+      const pageBg = getComputedStyle(document.body).backgroundColor;
+      surface = bcBg0 || firstColor(bcBg) || pageBg || SURF_LIGHT;
+      text = bc.t0 || TEXT_L;
+      
+      // bc.link is your current BetterCanvas link color mapping
+      accent = bc.link || MAROON;
+      
+      // Special-case ONLY the built-in BC Dark preset
+      if (isBuiltInBcDark()) {
+        accent = MAROON;
+      }
+      
+      ddBg = getCssVar(document.body, '--bcbackground-0') || surface;
+      ddText = getCssVar(document.body, '--bctext-1') || SUB_L;
+
+      const darkMode = isDarkByText(text);
+      LOG("applyTokens: BetterCanvas darkMode:", darkMode, "text:", text);
+      border = darkMode ? 'rgba(255,255,255,0.12)' : BORDER_L;
+      scrim = darkMode ? 'rgba(0,0,0,0.35)' : 'rgba(17,24,39,0.24)';
+      shadow = darkMode ? 'rgba(0,0,0,0.35)' : 'rgba(157,21,53,0.12)';
+
+      // Derive neutral button bg from surface
+      const btnBg = darkMode ? lighten(surface, 0.06) : darken(surface, 0.06);
+      const btnBgHover = darkMode ? lighten(surface, 0.10) : darken(surface, 0.10);
+      const btnText = darkMode ? TEXT_D : '#374151';
+    } else {
+      // Fallback (no BetterCanvas) — detect dark mode from page
+      const isDark = detectDarkModeFallback();
+      LOG("applyTokens: Fallback mode, isDark:", isDark);
+
+      surface = isDark ? SURF_DARK : SURF_LIGHT;
+      text = isDark ? TEXT_D : TEXT_L;
+      subtle = isDark ? SUB_D : SUB_L;
+      accent = MAROON;
+      border = isDark ? 'rgba(255,255,255,0.12)' : BORDER_L;
+      scrim = isDark ? 'rgba(0,0,0,0.4)' : 'rgba(17,24,39,0.20)';
+      shadow = isDark ? 'rgba(0,0,0,0.35)' : 'rgba(157,21,53,0.12)';
+
+      const btnBg = isDark ? darken(surface, 0.06) : '#f5f5f5';
+      const btnBgHover = isDark ? darken(surface, 0.10) : '#eeeeee';
+      const btnText = isDark ? TEXT_D : '#374151';
+      ddBg = surface;
+      ddText = subtle;
+    }
+
+    // Ensure we have valid color values
+    if (!surface || !text || !accent) {
+      LOG("applyTokens: Warning - missing color values", { surface, text, accent });
+      return;
+    }
+
+    // Apply all tokens - inline styles have high specificity
+    el.style.setProperty('--qt-surface', surface);
+    el.style.setProperty('--qt-border', border);
+    el.style.setProperty('--qt-text', text);
+    el.style.setProperty('--qt-subtle', bc.has ? ddText : subtle);
+    el.style.setProperty('--qt-accent', accent);
+    el.style.setProperty('--qt-accent-contrast', '#ffffff');
+    
+    // Set assignment name color (default to accent for non-special cases)
+    if (!bc.has || !isBuiltInBcDark()) {
+      el.style.setProperty('--qt-assignment-name', accent);
+    }
+    
+    // Special-case ONLY the built-in BC Dark preset - override specific tokens
+    if (bc.has && isBuiltInBcDark()) {
+      el.style.setProperty('--qt-accent', MAROON);
+      el.style.setProperty('--qt-add-bg', MAROON);
+      el.style.setProperty('--qt-add-bg-hover', darken(MAROON, 0.08));
+      el.style.setProperty('--qt-assignment-name', MAROON);
+    }
+    
+    const darkMode = bc.has ? isDarkByText(text) : detectDarkModeFallback();
+    const rowHover = darkMode ? darken(surface, 0.03) : (bc.has ? lighten(surface, 0.03) : '#fef9fa');
+    el.style.setProperty('--qt-row-hover', rowHover);
+    el.style.setProperty('--qt-shadow', shadow);
+    el.style.setProperty('--qt-scrim', scrim);
+
+    const btnBg = darkMode ? (bc.has ? lighten(surface, 0.06) : darken(surface, 0.06)) : (bc.has ? darken(surface, 0.06) : '#f5f5f5');
+    const btnBgHover = darkMode ? (bc.has ? lighten(surface, 0.10) : darken(surface, 0.10)) : (bc.has ? darken(surface, 0.10) : '#eeeeee');
+    const btnText = darkMode ? TEXT_D : '#374151';
+
+    el.style.setProperty('--qt-btn-bg', btnBg);
+    el.style.setProperty('--qt-btn-bg-hover', btnBgHover);
+    el.style.setProperty('--qt-btn-text', btnText);
+    el.style.setProperty('--qt-btn-border', border);
+
+    el.style.setProperty('--qt-add-bg', accent);
+    el.style.setProperty('--qt-add-bg-hover', darken(accent, 0.08));
+    el.style.setProperty('--qt-add-text', '#ffffff');
+
+    el.style.setProperty('--qt-dd-bg', bc.has ? ddBg : surface);
+    el.style.setProperty('--qt-dd-text', bc.has ? ddText : subtle);
+    el.style.setProperty('--qt-scroll-thumb', darkMode ? 'rgba(255,255,255,0.25)' : '#d1d5db');
+    el.style.setProperty('--qt-scroll-thumb-hover', darkMode ? 'rgba(255,255,255,0.4)' : accent);
+    
+    // Force background update - CSS uses var(--qt-surface) which should pick this up
+    // But we'll also set it directly as a backup
+    requestAnimationFrame(() => {
+      el.style.background = surface;
+      el.style.backgroundColor = surface;
+    });
+    
+    LOG("applyTokens: Applied tokens, surface:", surface, "text:", text, "accent:", accent, "darkMode:", darkMode);
+  }
+
   // Per-page gate: base state is "loading". We only allow rendering
   // real content after the first sync returns on THIS page load.
   let PAGE_GATE_OPEN = false;
@@ -97,6 +419,19 @@
       body.style.maxHeight = "60vh";
       body.style.overflow = "auto";
     }
+
+    // Apply theme tokens immediately
+    applyTokens(wrap);
+    
+    // Also apply after a short delay to catch BetterCanvas if it loads late
+    setTimeout(() => {
+      applyTokens(wrap);
+    }, 100);
+    
+    // And again after a longer delay for BetterCanvas that loads very late
+    setTimeout(() => {
+      applyTokens(wrap);
+    }, 1000);
 
     wireControls();
   }
@@ -426,33 +761,23 @@
 
     overlay = document.createElement("div");
     overlay.id = BL_OVERLAY_ID;
-    overlay.style.cssText = `
-      position: fixed; inset: 0; z-index: 2147483646;
-      background: rgba(17,24,39,0.28);
-      display: none;
-    `;
 
     const panel = document.createElement("div");
     panel.id = BL_PANEL_ID;
-    panel.style.cssText = `
-      position: fixed; top: 12vh; left: 50%;
-      transform: translateX(-50%);
-      width: min(480px, 92vw);
-      max-height: 70vh; overflow: auto;
-      background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.25);
-      user-select: none;
-    `;
 
     panel.innerHTML = `
-      <div id="${BL_HEAD_ID}" style="cursor:move; display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; border-bottom:1px solid #eee; background:#fafafa; border-top-left-radius:12px; border-top-right-radius:12px;">
-        <h4 style="margin:0; font-size:13px; font-weight:800; color:#111827;">Hidden (Blacklist)</h4>
-        <button type="button" id="qt-bl-close" class="qtask-btn qtask-del">Close</button>
+      <div id="${BL_HEAD_ID}">
+        <h4>Hidden (Blacklist)</h4>
+        <button type="button" id="qt-bl-close" class="qtask-btn qtask-add">Close</button>
       </div>
-      <div style="padding:10px 12px 12px;">
-        <div id="${BL_LIST_ID}" style="display:flex; flex-direction:column; gap:8px;"></div>
-      </div>
+      <div id="${BL_LIST_ID}"></div>
     `;
+
+    // Immediately sync theme tokens so header color matches assignment titles
+    const sidebar = document.getElementById(WIDGET_ID);
+    if (sidebar) {
+      copyTokensToOverlay(sidebar, overlay);
+    }
 
     overlay.appendChild(panel);
     document.documentElement.appendChild(overlay);
@@ -471,6 +796,13 @@
   function openBlacklistOverlay() {
     LOG("open blacklist popup");
     const overlay = ensureOverlay();
+    
+    // Ensure overlay has current theme tokens
+    const sidebar = document.getElementById(WIDGET_ID);
+    if (sidebar) {
+      copyTokensToOverlay(sidebar, overlay);
+    }
+    
     overlay.style.display = "block";
     renderBlacklistList();
   }
@@ -492,13 +824,9 @@
       list.innerHTML = items
         .map(
           (name) => `
-          <div class="qt-bl-item" style="display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center; padding:8px 10px; border:1px solid #eee; border-radius:10px; background:#fafafa;">
-            <div class="qt-bl-name" style="font-size:12px; color:#111827; font-weight:600; word-break:break-word;">${escapeHtml(
-              name
-            )}</div>
-            <button class="qtask-btn qtask-del" data-name="${escapeHtml(
-              name
-            )}">Unhide</button>
+          <div class="qt-bl-item">
+            <div class="qt-bl-name">${escapeHtml(name)}</div>
+            <button class="qtask-btn qtask-del" data-name="${escapeHtml(name)}">Unhide</button>
           </div>`
         )
         .join("");
@@ -567,9 +895,38 @@
         LOG("sidebar re-attaching after Canvas re-render");
         mountShell(parent);
         renderFromStorage();
+        // Tokens are applied in mountShell, but ensure they're applied here too
+        setTimeout(() => {
+          const sidebar = document.getElementById(WIDGET_ID);
+          if (sidebar) applyTokens(sidebar);
+        }, 100);
       }
     });
     obs.observe(document.body, { childList: true, subtree: true });
+  }
+
+  function watchBetterCanvasTheme() {
+    const themeStyle = document.getElementById('bettercanvas-theme-preset');
+    if (!themeStyle) return;
+
+    const obs = new MutationObserver(() => {
+      const sidebar = document.getElementById(WIDGET_ID);
+      if (sidebar) {
+        applyTokens(sidebar);
+        // Also update overlay if it exists
+        const overlay = document.getElementById(BL_OVERLAY_ID);
+        if (overlay) {
+          copyTokensToOverlay(sidebar, overlay);
+        }
+      }
+    });
+
+    obs.observe(themeStyle, {
+      attributes: true,
+      attributeFilter: ['style', 'class'],
+      childList: true,
+      subtree: true
+    });
   }
 
   function watchStorage() {
@@ -609,6 +966,23 @@
 
     watchForRerender();
     watchStorage();
+    
+    // Watch for BetterCanvas theme changes (delay to ensure style element exists)
+    setTimeout(() => {
+      watchBetterCanvasTheme();
+      // Re-apply tokens one more time after BetterCanvas observer is set up
+      const sidebar = document.getElementById(WIDGET_ID);
+      if (sidebar) applyTokens(sidebar);
+    }, 500);
+    
+    // Final retry after 2 seconds for slow-loading BetterCanvas
+    setTimeout(() => {
+      const sidebar = document.getElementById(WIDGET_ID);
+      if (sidebar) {
+        LOG("Final token application retry");
+        applyTokens(sidebar);
+      }
+    }, 2000);
   }
 
   try {
