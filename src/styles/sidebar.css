@@ -184,6 +184,13 @@
   min-width: fit-content; /* Buttons maintain their size */
 }
 
+.qtask-btn,
+.qtask-add,
+.qtask-del,
+.qtask-hide {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
 .qtask-btn {
   appearance: none;
   border: none;

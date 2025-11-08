@@ -76,6 +76,18 @@
     return `#${[mix(r, 0, t), mix(g, 0, t), mix(b, 0, t)].map(x => x.toString(16).padStart(2, '0')).join('')}`;
   }
 
+  // Slightly darken very light button backgrounds to improve contrast
+  function adjustButtonColorForReadability(color) {
+    const rgb = parseColorToRgb(color);
+    if (!rgb) return color;
+    const L = luminance(rgb);
+    // If background is too bright, darken it slightly
+    if (L > 180) {
+      return darken(color, 0.1); // adjust by about 10%
+    }
+    return color;
+  }
+
   function getCssVar(el, name) {
     return getComputedStyle(el).getPropertyValue(name)?.trim();
   }
@@ -306,7 +318,8 @@
     // Special-case ONLY the built-in BC Dark preset - override specific tokens
     if (bc.has && isBuiltInBcDark()) {
       el.style.setProperty('--qt-accent', MAROON);
-      el.style.setProperty('--qt-add-bg', MAROON);
+      const adjustedMaroonBg = adjustButtonColorForReadability(MAROON);
+      el.style.setProperty('--qt-add-bg', adjustedMaroonBg);
       el.style.setProperty('--qt-add-bg-hover', darken(MAROON, 0.08));
       el.style.setProperty('--qt-assignment-name', MAROON);
     }
@@ -326,7 +339,8 @@
     el.style.setProperty('--qt-btn-text', btnText);
     el.style.setProperty('--qt-btn-border', border);
 
-    el.style.setProperty('--qt-add-bg', accent);
+    const adjustedAddBg = adjustButtonColorForReadability(accent);
+    el.style.setProperty('--qt-add-bg', adjustedAddBg);
     el.style.setProperty('--qt-add-bg-hover', darken(accent, 0.08));
     el.style.setProperty('--qt-add-text', '#ffffff');
 
