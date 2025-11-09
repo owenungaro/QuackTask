@@ -1,103 +1,120 @@
+# 🦆 QuackTask
 
-  
+QuackTask is a Chrome extension that integrates directly into the Canvas dashboard and syncs your assignments to Google Tasks.  
+It is designed for students at **Stevens Institute of Technology**, but support for other Canvas schools is planned for future updates.
 
-# QuackTask
+![QuackTask preview](https://raw.githubusercontent.com/owenungaro/QuackTask/main/assets/icons/quacktask_128.png) 
 
-  
+---
 
-QuackTask is a Chrome extension that integrates Canvas tasks, homework, and assignments into Google Tasks for students at Stevens Institute of Technology. Currently on the Chrome Store!
+## Overview
 
-https://chromewebstore.google.com/detail/quacktask/cpmbfihgmlpkgpadfbdfgbepkgoighie
+QuackTask connects Canvas and Google Tasks so you can manage coursework without switching tabs.  
+It automatically detects assignments on your dashboard, lists them in a sidebar, and lets you sync them to Google Tasks with one click.  
 
-  
+The extension detects your current Canvas or BetterCanvas theme and adjusts its colors to match. Most themes work smoothly, though some heavily customized ones may look slightly different.  
 
-  
+At the moment, QuackTask is configured for **Stevens Canvas** (`https://sit.instructure.com/`). Once testing and performance tuning are complete, it will be expanded to work across **all Canvas instances**, so any university using Canvas can install and use it the same way.
+
+---
 
 ## Features
 
-  
+**Canvas Integration**  
+Automatically pulls assignments and due dates from the Canvas dashboard. Each item links directly to its Canvas assignment page.
 
-**Canvas Integration** – Automatically imports assignments and tasks from Canvas.
+**Google Tasks Sync**  
+Send or remove assignments from Google Tasks with a single click. Everything stays synced to the list you choose.
 
-**Google Tasks Sync** – Pushes Canvas tasks to Google Tasks for easy access and organization.
+**Persistent Google Login**  
+Once connected, your Google account stays signed in through Chrome’s identity API. No repeated logins.
 
-**Unique Assignment Filtering** – Ensures that only unique assignments are added to your Google Tasks, preventing duplicates.
+**Blacklist System**  
+Hide assignments you do not want to see. You can restore hidden items later through the Blacklist panel.
 
-**Persistent Authentication** – Avoids unnecessary logins with persistent Google authentication.
+**Dynamic Theme Detection**  
+Supports light and dark modes in Canvas and most BetterCanvas themes. Colors and text adapt instantly when you switch themes without needing a reload.
 
-**Minimal Setup** – Runs as a lightweight Chrome extension with a simple UI.
+**Draggable Overlays**  
+The Help and Blacklist windows can be dragged anywhere on the screen and automatically match your current theme colors.
 
-**Stevens Email Requirement** – Currently, QuackTask only works for Stevens Institute of Technology students with an `@stevens.edu` email.
+**Consistent Hover Styling**  
+Hover outlines and shadows have been standardized across all supported modes for a balanced look and better readability.
 
-  
+---
 
-  
+## How to Use
 
-## Installation
+1. **Open Canvas**  
+   Go to [https://sit.instructure.com/](https://sit.instructure.com/) (Stevens students only for now).
 
-  
+2. **Launch QuackTask**  
+   The sidebar loads automatically when you open the Canvas dashboard.
+
+3. **Login with Google**  
+   Click **Login** to connect your Google account through Chrome.
+
+4. **Select a Task List**  
+   Choose which Google Tasks list you want to use for your assignments.
+
+5. **Manage Assignments**  
+   - **Add:** Send an assignment to Google Tasks  
+   - **Delete:** Remove it from Google Tasks  
+   - **Hide:** Temporarily remove it from the sidebar  
+
+6. **Open Blacklist and Help**  
+   - **Blacklist:** View or restore hidden assignments  
+   - **Help:** Read a short guide inside Canvas  
+
+7. **Change Themes**  
+   Switch between Canvas or BetterCanvas themes and watch QuackTask automatically adapt its styling.
+
+---
+
+## Theming Demo
+
+Below is a preview of QuackTask reacting to multiple Canvas and BetterCanvas themes in real time.  
+No page reloads are needed. Everything updates as soon as the theme changes.
+
+![Theme demo](https://raw.githubusercontent.com/owenungaro/QuackTask/main/assets/images/quacktask_themes_gif.gif)
+
+---
+
+## Technical Details
+
+**Core Stack**
+- Chrome Extension (Manifest V3)  
+- Google Tasks REST API  
+- `chrome.identity` for authentication  
+- `chrome.storage.local` for local caching  
+- Mutation Observers for live Canvas and BetterCanvas updates  
+- Vanilla JavaScript  
+
+**Key Files**
+- `sidebar.js` – main logic, theming, and UI rendering  
+- `sidebar.css` – layout and responsive styling  
+- `tasksApi.js` – Google Tasks API requests  
+- `auth.js` – Google OAuth integration  
+- `storage.js` – local storage management  
+- `index.js` – background service worker  
+- `router.js` – background message routing  
+
+---
+
+## Design Philosophy
+
+QuackTask is meant to blend into Canvas as if it were built-in.  
+The design is simple, with the maroon (`#9D1535`) accent color used consistently across buttons and highlights.  
+It prioritizes readability and alignment with each user’s current theme.  
+
+Because Canvas themes vary across institutions, full universal compatibility will be introduced once cross-domain support is tested and verified.  
+This upcoming expansion will allow students from any Canvas-based university to use QuackTask on their dashboard.
+
+---
+
+## Installation for Developers
 
 1. Clone this repository:
-
-```sh
-
-git clone https://github.com/owenungaro/QuackTask.git
-
-```
-
-2. Navigate to `chrome://extensions/` in your browser.
-
-3. Enable Developer Mode (top right corner).
-
-4. Click "Load unpacked" and select the QuackTask folder.
-
-5. Authenticate with Google and Canvas to start syncing tasks.
-
-  
-
-  
-
-## Usage
-
-  
-
-1. Open QuackTask from the Chrome Extensions menu.
-
-2. Log in with your Google account to connect Google Tasks.
-
-3. Ensure the **Tasks for Canvas** is installed ([Get it here](https://chromewebstore.google.com/detail/tasks-for-canvas-%E2%80%93-now-su/kabafodfnabokkkddjbnkgbcbmipdlmb)) and logged into Canvas.
-
-4.  **Important:** To scrape assignments successfully, you must be on your Canvas home page (`sit.instructure.com`) while QuackTask is in the "Loading Assignments" stage.
-
-
-  
-  
-
-## Future Updates
-
-  
-- QuackTask website for OAuth App Verication via home page and privacy policy.
-
-- Improved error handling and debugging.
-
-- Additional support for different LMS platforms.
-
-- UI improvements and better task categorization.
-
-  
-
-
-  
-
-## Contribution
-
-  
-
-If you'd like to contribute to QuackTask, feel free to submit a pull request or open an issue.
-
-  
-
-
-  
-
-Developed by **Owen Ungaro**
+   ```bash
+   git clone https://github.com/owenungaro/QuackTask.git
+   cd QuackTask
