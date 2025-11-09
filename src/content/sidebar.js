@@ -1056,19 +1056,36 @@
 
     const onDown = (e) => {
       dragging = true;
+    
+      // Capture the panel's current position before we kill the transform
       const rect = panel.getBoundingClientRect();
-      panel.style.transform = "none";
-      panel.style.left = `${rect.left}px`;
-      panel.style.top = `${rect.top}px`;
-
-      sx = e.clientX;
-      sy = e.clientY;
-      startLeft = getNumbers(panel.style.left);
-      startTop = getNumbers(panel.style.top);
-
-      document.addEventListener("mousemove", onMove);
-      document.addEventListener("mouseup", onUp, { once: true });
+    
+      // Immediately stop any transition so there's no easing snap
+      panel.style.transition = "none";
+    
+      // Wait one frame so the current transform/transition fully settles
+      requestAnimationFrame(() => {
+        // Disable transform-based centering (so we can use pixel positions)
+        panel.style.transform = "none";
+    
+        // Set explicit pixel-based position so dragging starts smoothly
+        panel.style.left = `${rect.left}px`;
+        panel.style.top = `${rect.top}px`;
+    
+        // Force layout reflow to apply changes instantly
+        panel.offsetHeight;
+    
+        // Now safe to start tracking mouse movement
+        sx = e.clientX;
+        sy = e.clientY;
+        startLeft = parseFloat(panel.style.left) || 0;
+        startTop = parseFloat(panel.style.top) || 0;
+    
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp, { once: true });
+      });
     };
+    
 
     const onMove = (e) => {
       if (!dragging) return;
