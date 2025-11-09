@@ -3,7 +3,7 @@
   "name": "QuackTask",
   "version": "1.6.0",
   "description": "Sync your Canvas tasks with Google Tasks to stay organized and on top of your assignments effortlessly.",
-  "permissions": ["scripting", "activeTab", "storage", "identity"],
+  "permissions": ["scripting", "activeTab", "storage", "identity", "tabs"],
   "host_permissions": [
     "https://sit.instructure.com/*",
     "https://www.googleapis.com/*"
