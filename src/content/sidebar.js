@@ -8,6 +8,7 @@
   const SELECT_ID = "qt-folder-select";
   const BTN_BLACKLIST_ID = "qt-open-blacklist";
   const BTN_AUTH_ID = "qt-auth-toggle";
+  const BTN_HELP_ID = "qt-help";
 
   // Overlay panel for blacklist (new, reliable)
   const BL_OVERLAY_ID = "qt-bl-overlay";
@@ -158,7 +159,8 @@
       '--qt-accent-contrast', '--qt-row-hover', '--qt-shadow', '--qt-scrim',
       '--qt-btn-bg', '--qt-btn-bg-hover', '--qt-btn-text', '--qt-btn-border',
       '--qt-add-bg', '--qt-add-bg-hover', '--qt-add-text',
-      '--qt-dd-bg', '--qt-dd-text', '--qt-scroll-thumb', '--qt-scroll-thumb-hover'
+      '--qt-dd-bg', '--qt-dd-text', '--qt-scroll-thumb', '--qt-scroll-thumb-hover',
+      '--qt-bl-panel-bg', '--qt-bl-head-bg', '--qt-bl-item-bg', '--qt-bl-item-hover-bg', '--qt-bl-head-text', '--qt-bl-item-text', '--qt-bl-close-text'
     ];
     tokens.forEach(token => {
       const value = computed.getPropertyValue(token);
@@ -325,9 +327,17 @@
     }
     
     const darkMode = bc.has ? isDarkByText(text) : detectDarkModeFallback();
-    const rowHover = darkMode ? darken(surface, 0.03) : (bc.has ? lighten(surface, 0.03) : '#fef9fa');
+    let rowHover;
+    if (!detectDarkModeFallback()) {
+      // Light mode – use neutral gray-based highlight and black shadow
+      rowHover = '#f9fafb'; // subtle light gray instead of reddish tint
+      el.style.setProperty('--qt-shadow', 'rgba(0,0,0,0.15)');
+    } else {
+      // Dark mode or BetterCanvas dark – keep crimson tones
+      rowHover = darken(surface, 0.03);
+      el.style.setProperty('--qt-shadow', shadow);
+    }
     el.style.setProperty('--qt-row-hover', rowHover);
-    el.style.setProperty('--qt-shadow', shadow);
     el.style.setProperty('--qt-scrim', scrim);
 
     const btnBg = darkMode ? (bc.has ? lighten(surface, 0.06) : darken(surface, 0.06)) : (bc.has ? darken(surface, 0.06) : '#f5f5f5');
@@ -348,6 +358,82 @@
     el.style.setProperty('--qt-dd-text', bc.has ? ddText : subtle);
     el.style.setProperty('--qt-scroll-thumb', darkMode ? 'rgba(255,255,255,0.25)' : '#d1d5db');
     el.style.setProperty('--qt-scroll-thumb-hover', darkMode ? 'rgba(255,255,255,0.4)' : accent);
+
+    // Blacklist panel styling - only for fallback (non-BetterCanvas) themes
+    if (!bc.has) {
+      const isDark = detectDarkModeFallback();
+      if (isDark) {
+        // Dark mode fallback: dark grey panel, maroon header, white items
+        const darkItemBg = darken(SURF_DARK, 0.03); // slightly darker for items
+        const darkItemHoverBg = lighten(SURF_DARK, 0.05); // slightly lighter on hover
+        el.style.setProperty('--qt-bl-panel-bg', SURF_DARK);
+        el.style.setProperty('--qt-bl-head-bg', SURF_DARK); // header background matches panel
+        el.style.setProperty('--qt-bl-item-bg', darkItemBg); // item background
+        el.style.setProperty('--qt-bl-item-hover-bg', darkItemHoverBg); // item hover background
+        el.style.setProperty('--qt-bl-head-text', MAROON);
+        el.style.setProperty('--qt-bl-item-text', TEXT_D);
+        el.style.setProperty('--qt-bl-close-text', TEXT_D); // white text on maroon button
+      } else {
+        // Light mode fallback: white panel, default colors, white close button text
+        el.style.setProperty('--qt-bl-panel-bg', SURF_LIGHT);
+        el.style.setProperty('--qt-bl-head-bg', '#fafafa'); // light grey header background
+        el.style.setProperty('--qt-bl-item-bg', '#fafafa'); // light grey item background
+        el.style.setProperty('--qt-bl-item-hover-bg', '#fef9fa'); // light item hover background
+        el.style.setProperty('--qt-bl-head-text', accent); // use accent/maroon
+        el.style.setProperty('--qt-bl-item-text', TEXT_L);
+        el.style.setProperty('--qt-bl-close-text', '#ffffff'); // white text on maroon button
+      }
+    } else {
+      // BetterCanvas: use existing variables (don't override)
+      // Clear any fallback-specific overrides
+      el.style.removeProperty('--qt-bl-panel-bg');
+      el.style.removeProperty('--qt-bl-head-bg');
+      el.style.removeProperty('--qt-bl-item-bg');
+      el.style.removeProperty('--qt-bl-item-hover-bg');
+      el.style.removeProperty('--qt-bl-head-text');
+      el.style.removeProperty('--qt-bl-item-text');
+      el.style.removeProperty('--qt-bl-close-text');
+    }
+
+    // Apply or remove text-shadow class depending on theme
+    // Text shadow is needed for mid-tone themes where contrast might be low
+    // We check button background since that's what the buttons actually render on
+    let needsTextShadow = false;
+    
+    // Check button background luminance (what buttons actually render on)
+    const btnBgRgb = parseColorToRgb(btnBg);
+    if (btnBgRgb) {
+      const btnBgLum = luminance(btnBgRgb);
+      const btnTextRgb = parseColorToRgb(btnText);
+      const btnTextLum = btnTextRgb ? luminance(btnTextRgb) : 128;
+      
+      // Check if button background is mid-tone
+      // Not clearly light (luminance > 200) and not clearly dark (luminance < 80)
+      // Mid-tone range: 80-200
+      const isClearlyLight = btnBgLum > 200;
+      const isClearlyDark = btnBgLum < 80;
+      const isMidTone = !isClearlyLight && !isClearlyDark;
+      
+      // Also check contrast between button text and background
+      const contrast = Math.abs(btnTextLum - btnBgLum);
+      const lowContrast = contrast < 130;
+      
+      // Enable text shadow for mid-tone themes (not clearly light or dark)
+      // or when contrast between text and background is low
+      needsTextShadow = isMidTone || (lowContrast && btnBgLum > 50 && btnBgLum < 210);
+      
+      LOG("Text shadow check: btnBg=", btnBg, "btnBgLum=", btnBgLum, 
+          "btnTextLum=", btnTextLum, "contrast=", contrast.toFixed(1),
+          "isMidTone=", isMidTone, "needsTextShadow=", needsTextShadow);
+    }
+    
+    if (needsTextShadow) {
+      el.classList.add('qt-has-textshadow');
+      LOG("Added qt-has-textshadow class to sidebar");
+    } else {
+      el.classList.remove('qt-has-textshadow');
+      LOG("Removed qt-has-textshadow class from sidebar");
+    }
     
     // Force background update - CSS uses var(--qt-surface) which should pick this up
     // But we'll also set it directly as a backup
@@ -415,6 +501,7 @@
         <div class="qt-actions-row">
           <button id="${BTN_BLACKLIST_ID}" type="button" class="qtask-btn qtask-del">Blacklist</button>
           <button id="${BTN_AUTH_ID}" type="button" class="qtask-btn qtask-del" data-mode="login">Login</button>
+          <button id="${BTN_HELP_ID}" type="button" class="qtask-btn qtask-del">Help</button>
         </div>
       </div>
 
@@ -499,6 +586,14 @@
             sel.appendChild(opt);
           }
         }
+      };
+    }
+
+    const helpBtn = document.getElementById(BTN_HELP_ID);
+    if (helpBtn) {
+      helpBtn.onclick = () => {
+        // Placeholder for help functionality
+        LOG("help button clicked");
       };
     }
 

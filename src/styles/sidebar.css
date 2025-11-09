@@ -184,12 +184,14 @@
   min-width: fit-content; /* Buttons maintain their size */
 }
 
-.qtask-btn,
-.qtask-add,
-.qtask-del,
-.qtask-hide {
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+/* Text shadow variant for mid-tone BetterCanvas themes */
+#quacktask-sidebar.qt-has-textshadow .qtask-btn,
+#quacktask-sidebar.qt-has-textshadow .qtask-add,
+#quacktask-sidebar.qt-has-textshadow .qtask-del,
+#quacktask-sidebar.qt-has-textshadow .qtask-hide {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35) !important;
 }
+
 
 .qtask-btn {
   appearance: none;
@@ -311,7 +313,7 @@
   width: min(480px, 92vw);
   max-height: 70vh;
   overflow: auto;
-  background: var(--qt-surface, #ffffff);
+  background: var(--qt-bl-panel-bg, var(--qt-surface, #ffffff));
   border: 1px solid var(--qt-border, #e5e7eb);
   border-radius: 12px;
   box-shadow: 0 20px 60px var(--qt-shadow, rgba(0, 0, 0, 0.25));
@@ -326,7 +328,7 @@
   gap: 8px;
   padding: 10px 12px;
   border-bottom: 1px solid var(--qt-border, #e5e7eb);
-  background: var(--qt-row-hover, #fafafa);
+  background: var(--qt-bl-head-bg, var(--qt-row-hover, #fafafa));
   border-top-left-radius: 12px;
   border-top-right-radius: 12px;
 }
@@ -335,16 +337,17 @@
   margin: 0;
   font-size: 13px;
   font-weight: 800;
-  color: var(--qt-assignment-name, var(--qt-accent, #9d1535));
+  color: var(--qt-bl-head-text, var(--qt-btn-text, #374151)) !important;
 }
 
 #qt-bl-head button#qt-bl-close {
   background: var(--qt-accent, #9d1535);
-  color: var(--qt-accent-contrast, #ffffff);
+  color: var(--qt-bl-close-text, var(--qt-btn-text, #374151)) !important;
 }
 
 #qt-bl-head button#qt-bl-close:hover {
   background: var(--qt-add-bg-hover, #b81c40);
+  color: var(--qt-bl-close-text, var(--qt-btn-text, #374151)) !important;
 }
 
 #qt-bl-list {
@@ -362,20 +365,29 @@
   padding: 8px 10px;
   border: 1px solid var(--qt-border, #e5e7eb);
   border-radius: 10px;
-  background: var(--qt-row-hover, #fafafa);
+  background: var(--qt-bl-item-bg, var(--qt-row-hover, #fafafa));
   transition: all 0.2s ease-out;
 }
 
 .qt-bl-item:hover {
   border-color: var(--qt-accent, #9d1535);
-  background: var(--qt-row-hover, #fef9fa);
+  background: var(--qt-bl-item-hover-bg, var(--qt-row-hover, #fef9fa));
 }
 
 .qt-bl-name {
   font-size: 12px;
-  color: var(--qt-text, #111827);
+  color: var(--qt-bl-item-text, var(--qt-text, #111827)) !important;
   font-weight: 600;
   word-break: break-word;
+}
+
+/* Unhide buttons in blacklist should match sidebar button text color */
+#qt-bl-panel .qtask-btn.qtask-del {
+  color: var(--qt-btn-text, #374151) !important;
+}
+
+#qt-bl-panel .qtask-btn.qtask-del:hover {
+  color: var(--qt-text, #1f2937) !important;
 }
 
 .qtask-btn[disabled] {
@@ -408,4 +420,5 @@
   display: flex;
   gap: 8px;
   align-items: center;
+  justify-content: center;
 }
