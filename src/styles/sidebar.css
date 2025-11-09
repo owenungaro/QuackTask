@@ -118,9 +118,18 @@
 
 .qtask-row:hover {
   border-color: var(--qt-accent, #9d1535);
+  /* In dark mode (outline mode), don't change background, just enhance border/outline */
   background: var(--qt-row-hover, #fef9fa);
   box-shadow: 0 4px 12px var(--qt-shadow, rgba(157, 21, 53, 0.12));
   transform: translateY(-1px);
+}
+
+/* Dark mode: use outline effect instead of background change */
+#quacktask-sidebar[data-dark-mode="true"] .qtask-row:hover {
+  background: var(--qt-surface) !important;
+  border-color: var(--qt-accent, #9d1535);
+  /* Use box-shadow for outline effect without affecting layout */
+  box-shadow: 0 0 0 2px var(--qt-accent, #9d1535), 0 4px 12px var(--qt-shadow, rgba(157, 21, 53, 0.12));
 }
 
 .qtask-title {
@@ -303,13 +312,19 @@
   z-index: 2147483646;
   background: var(--qt-scrim, rgba(17, 24, 39, 0.28));
   display: none;
+  opacity: 0;
+  transition: opacity 0.2s ease-out;
+}
+
+#qt-bl-overlay.qt-overlay-visible {
+  opacity: 1;
 }
 
 #qt-bl-panel {
   position: fixed;
   top: 12vh;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translateX(-50%) scale(0.95);
   width: min(480px, 92vw);
   max-height: 70vh;
   overflow: auto;
@@ -318,6 +333,13 @@
   border-radius: 12px;
   box-shadow: 0 20px 60px var(--qt-shadow, rgba(0, 0, 0, 0.25));
   user-select: none;
+  transition: transform 0.2s ease-out, opacity 0.2s ease-out;
+  opacity: 0;
+}
+
+#qt-bl-overlay.qt-overlay-visible #qt-bl-panel {
+  transform: translateX(-50%) scale(1);
+  opacity: 1;
 }
 
 #qt-bl-head {
@@ -421,4 +443,152 @@
   gap: 8px;
   align-items: center;
   justify-content: center;
+}
+
+/* ---------- Help overlay (reuses blacklist overlay styles) ---------- */
+#qt-help-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  background: var(--qt-scrim, rgba(17, 24, 39, 0.28));
+  display: none;
+  opacity: 0;
+  transition: opacity 0.2s ease-out;
+}
+
+#qt-help-overlay.qt-overlay-visible {
+  opacity: 1;
+}
+
+#qt-help-panel {
+  position: fixed;
+  top: 12vh;
+  left: 50%;
+  transform: translateX(-50%) scale(0.95);
+  width: min(520px, 92vw);
+  max-height: 75vh;
+  overflow: auto;
+  background: var(--qt-help-panel-bg, var(--qt-bl-panel-bg, var(--qt-surface, #ffffff)));
+  border: 1px solid var(--qt-border, #e5e7eb);
+  border-radius: 12px;
+  box-shadow: 0 20px 60px var(--qt-shadow, rgba(0, 0, 0, 0.25));
+  user-select: text;
+  transition: transform 0.2s ease-out, opacity 0.2s ease-out, background 0.2s ease-out;
+  opacity: 0;
+}
+
+#qt-help-overlay.qt-overlay-visible #qt-help-panel {
+  transform: translateX(-50%) scale(1);
+  opacity: 1;
+}
+
+#qt-help-head {
+  cursor: move;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--qt-border, #e5e7eb);
+  background: var(--qt-help-head-bg, var(--qt-bl-head-bg, var(--qt-row-hover, #fafafa)));
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+  transition: background 0.2s ease-out;
+}
+
+#qt-help-head h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--qt-bl-head-text, var(--qt-btn-text, #374151)) !important;
+}
+
+#qt-help-head button#qt-help-close {
+  background: var(--qt-accent, #9d1535);
+  color: var(--qt-bl-close-text, var(--qt-btn-text, #374151)) !important;
+}
+
+#qt-help-head button#qt-help-close:hover {
+  background: var(--qt-add-bg-hover, #b81c40);
+  color: var(--qt-bl-close-text, var(--qt-btn-text, #374151)) !important;
+}
+
+#qt-help-content {
+  padding: 20px 16px;
+  color: var(--qt-text, #111827);
+  line-height: 1.6;
+}
+
+/* Scrollbar styling for help panel */
+#qt-help-panel::-webkit-scrollbar {
+  width: 8px;
+}
+
+#qt-help-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#qt-help-panel::-webkit-scrollbar-thumb {
+  background: var(--qt-scroll-thumb, #d1d5db);
+  border-radius: 4px;
+}
+
+#qt-help-panel::-webkit-scrollbar-thumb:hover {
+  background: var(--qt-scroll-thumb-hover, #9d1535);
+}
+
+.qt-help-section {
+  margin-bottom: 20px;
+}
+
+.qt-help-section:last-of-type {
+  margin-bottom: 0;
+}
+
+.qt-help-section h5 {
+  margin: 0 0 10px 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--qt-accent, #9d1535);
+  letter-spacing: -0.1px;
+}
+
+.qt-help-section p {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  color: var(--qt-text, #111827);
+}
+
+.qt-help-list {
+  margin: 8px 0;
+  padding-left: 20px;
+  font-size: 13px;
+  color: var(--qt-text, #111827);
+}
+
+.qt-help-list li {
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.qt-help-list li:last-child {
+  margin-bottom: 0;
+}
+
+.qt-help-list strong {
+  color: var(--qt-accent, #9d1535);
+  font-weight: 600;
+}
+
+.qt-help-footer {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--qt-border, #e5e7eb);
+}
+
+.qt-help-footer p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--qt-subtle, #6b7280);
+  text-align: center;
 }

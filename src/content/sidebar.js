@@ -16,6 +16,12 @@
   const BL_HEAD_ID = "qt-bl-head";
   const BL_LIST_ID = "qt-bl-list";
 
+  // Overlay panel for help
+  const HELP_OVERLAY_ID = "qt-help-overlay";
+  const HELP_PANEL_ID = "qt-help-panel";
+  const HELP_HEAD_ID = "qt-help-head";
+  const HELP_CONTENT_ID = "qt-help-content";
+
   const DASH_URLS = [
     "https://sit.instructure.com/",
     "https://sit.instructure.com/?login_success=1",
@@ -137,11 +143,21 @@
   }
 
   function detectBetterCanvas() {
+    // Check if BetterCanvas style element exists (more reliable than CSS vars)
+    const themeStyle = document.getElementById('bettercanvas-theme-preset');
+    const hasStyleElement = !!themeStyle;
+    
+    // Check for BetterCanvas CSS variables on body
     const s = getComputedStyle(document.body);
     const bg0 = s.getPropertyValue('--bcbackground-0-ungradient')?.trim();
     const t0 = s.getPropertyValue('--bctext-0')?.trim();
     const link = s.getPropertyValue('--bclinks')?.trim();
-    return { bg0, t0, link, has: !!(bg0 || t0 || link) };
+    
+    // BetterCanvas is present if style element exists OR if CSS variables are present
+    // Prefer style element check as it's more reliable
+    const has = hasStyleElement || !!(bg0 || t0 || link);
+    
+    return { bg0, t0, link, has, hasStyleElement };
   }
 
   function isDarkByText(color) {
@@ -160,14 +176,18 @@
       '--qt-btn-bg', '--qt-btn-bg-hover', '--qt-btn-text', '--qt-btn-border',
       '--qt-add-bg', '--qt-add-bg-hover', '--qt-add-text',
       '--qt-dd-bg', '--qt-dd-text', '--qt-scroll-thumb', '--qt-scroll-thumb-hover',
-      '--qt-bl-panel-bg', '--qt-bl-head-bg', '--qt-bl-item-bg', '--qt-bl-item-hover-bg', '--qt-bl-head-text', '--qt-bl-item-text', '--qt-bl-close-text'
+      '--qt-bl-panel-bg', '--qt-bl-head-bg', '--qt-bl-item-bg', '--qt-bl-item-hover-bg', '--qt-bl-head-text', '--qt-bl-item-text', '--qt-bl-close-text',
+      '--qt-help-panel-bg', '--qt-help-head-bg'
     ];
     tokens.forEach(token => {
       const value = computed.getPropertyValue(token);
       if (value) {
         overlay.style.setProperty(token, value);
-        const panel = document.getElementById(BL_PANEL_ID);
-        if (panel) panel.style.setProperty(token, value);
+        // Copy to both blacklist and help panels if they exist
+        const blPanel = document.getElementById(BL_PANEL_ID);
+        if (blPanel) blPanel.style.setProperty(token, value);
+        const helpPanel = document.getElementById(HELP_PANEL_ID);
+        if (helpPanel) helpPanel.style.setProperty(token, value);
       }
     });
     
@@ -177,8 +197,11 @@
       const value = computed.getPropertyValue(token);
       if (value) {
         overlay.style.setProperty(token, value);
-        const panel = document.getElementById(BL_PANEL_ID);
-        if (panel) panel.style.setProperty(token, value);
+        // Copy to both blacklist and help panels if they exist
+        const blPanel = document.getElementById(BL_PANEL_ID);
+        if (blPanel) blPanel.style.setProperty(token, value);
+        const helpPanel = document.getElementById(HELP_PANEL_ID);
+        if (helpPanel) helpPanel.style.setProperty(token, value);
       }
     });
   }
@@ -227,6 +250,31 @@
     return false;
   }
 
+  // Clear all theme-related CSS variables to ensure clean reset
+  function clearThemeVariables(el) {
+    if (!el) return;
+    
+    const allThemeVars = [
+      '--qt-surface', '--qt-border', '--qt-text', '--qt-subtle', '--qt-accent',
+      '--qt-accent-contrast', '--qt-row-hover', '--qt-shadow', '--qt-scrim',
+      '--qt-btn-bg', '--qt-btn-bg-hover', '--qt-btn-text', '--qt-btn-border',
+      '--qt-add-bg', '--qt-add-bg-hover', '--qt-add-text',
+      '--qt-dd-bg', '--qt-dd-text', '--qt-scroll-thumb', '--qt-scroll-thumb-hover',
+      '--qt-assignment-name',
+      '--qt-bl-panel-bg', '--qt-bl-head-bg', '--qt-bl-item-bg', '--qt-bl-item-hover-bg',
+      '--qt-bl-head-text', '--qt-bl-item-text', '--qt-bl-close-text',
+      '--qt-help-panel-bg', '--qt-help-head-bg', '--qt-row-hover-mode'
+    ];
+    
+    // Remove all theme variables to ensure clean slate
+    allThemeVars.forEach(varName => {
+      el.style.removeProperty(varName);
+    });
+    
+    // Also clear data-dark-mode attribute
+    el.removeAttribute('data-dark-mode');
+  }
+
   function applyTokens(root) {
     const el = root || document.getElementById(WIDGET_ID);
     if (!el) {
@@ -234,6 +282,10 @@
       return;
     }
     
+    // Clear all old theme variables first to ensure clean reset
+    clearThemeVariables(el);
+    
+    // Force fresh detection - re-read all computed styles
     const bc = detectBetterCanvas();
     LOG("applyTokens: BetterCanvas detected:", bc.has, bc);
 
@@ -312,8 +364,16 @@
     el.style.setProperty('--qt-accent', accent);
     el.style.setProperty('--qt-accent-contrast', '#ffffff');
     
-    // Set assignment name color (default to accent for non-special cases)
-    if (!bc.has || !isBuiltInBcDark()) {
+    const darkMode = bc.has ? isDarkByText(text) : detectDarkModeFallback();
+    
+    // Set assignment name color - ensure MAROON in all fallback modes
+    if (!bc.has) {
+      // Fallback mode (no BetterCanvas): always use MAROON for assignment names
+      // accent is already set to MAROON in fallback mode (line 341)
+      el.style.setProperty('--qt-assignment-name', MAROON);
+      el.style.setProperty('--qt-accent', MAROON); // Ensure it's set explicitly
+    } else if (!isBuiltInBcDark()) {
+      // BetterCanvas but not built-in dark: use detected accent
       el.style.setProperty('--qt-assignment-name', accent);
     }
     
@@ -326,19 +386,25 @@
       el.style.setProperty('--qt-assignment-name', MAROON);
     }
     
-    const darkMode = bc.has ? isDarkByText(text) : detectDarkModeFallback();
     let rowHover;
-    if (!detectDarkModeFallback()) {
+    if (!darkMode) {
       // Light mode – use neutral gray-based highlight and black shadow
       rowHover = '#f9fafb'; // subtle light gray instead of reddish tint
       el.style.setProperty('--qt-shadow', 'rgba(0,0,0,0.15)');
     } else {
-      // Dark mode or BetterCanvas dark – keep crimson tones
-      rowHover = darken(surface, 0.03);
+      // Dark mode – don't change background, just use outline
+      rowHover = surface; // Keep same background, no color change
       el.style.setProperty('--qt-shadow', shadow);
     }
     el.style.setProperty('--qt-row-hover', rowHover);
     el.style.setProperty('--qt-scrim', scrim);
+    
+    // Set data attribute for dark mode to enable outline hover effect
+    if (darkMode) {
+      el.setAttribute('data-dark-mode', 'true');
+    } else {
+      el.removeAttribute('data-dark-mode');
+    }
 
     const btnBg = darkMode ? (bc.has ? lighten(surface, 0.06) : darken(surface, 0.06)) : (bc.has ? darken(surface, 0.06) : '#f5f5f5');
     const btnBgHover = darkMode ? (bc.has ? lighten(surface, 0.10) : darken(surface, 0.10)) : (bc.has ? darken(surface, 0.10) : '#eeeeee');
@@ -359,8 +425,9 @@
     el.style.setProperty('--qt-scroll-thumb', darkMode ? 'rgba(255,255,255,0.25)' : '#d1d5db');
     el.style.setProperty('--qt-scroll-thumb-hover', darkMode ? 'rgba(255,255,255,0.4)' : accent);
 
-    // Blacklist panel styling - only for fallback (non-BetterCanvas) themes
+    // Blacklist and help panel styling
     if (!bc.has) {
+      // Not BetterCanvas - use fallback theme
       const isDark = detectDarkModeFallback();
       if (isDark) {
         // Dark mode fallback: dark grey panel, maroon header, white items
@@ -373,21 +440,30 @@
         el.style.setProperty('--qt-bl-head-text', MAROON);
         el.style.setProperty('--qt-bl-item-text', TEXT_D);
         el.style.setProperty('--qt-bl-close-text', TEXT_D); // white text on maroon button
+        // Help panel uses same background as blacklist in dark mode
+        el.style.setProperty('--qt-help-panel-bg', SURF_DARK);
+        el.style.setProperty('--qt-help-head-bg', SURF_DARK);
       } else {
         // Light mode fallback: white panel, default colors, white close button text
         el.style.setProperty('--qt-bl-panel-bg', SURF_LIGHT);
         el.style.setProperty('--qt-bl-head-bg', '#fafafa'); // light grey header background
         el.style.setProperty('--qt-bl-item-bg', '#fafafa'); // light grey item background
         el.style.setProperty('--qt-bl-item-hover-bg', '#fef9fa'); // light item hover background
-        el.style.setProperty('--qt-bl-head-text', accent); // use accent/maroon
+        el.style.setProperty('--qt-bl-head-text', MAROON); // use maroon in light mode
         el.style.setProperty('--qt-bl-item-text', TEXT_L);
         el.style.setProperty('--qt-bl-close-text', '#ffffff'); // white text on maroon button
+        // Help panel uses same background as blacklist in light mode
+        el.style.setProperty('--qt-help-panel-bg', SURF_LIGHT);
+        el.style.setProperty('--qt-help-head-bg', '#fafafa');
       }
     } else {
-      // BetterCanvas: use existing variables (don't override)
-      // Clear any fallback-specific overrides
-      el.style.removeProperty('--qt-bl-panel-bg');
-      el.style.removeProperty('--qt-bl-head-bg');
+      // BetterCanvas: use surface color for panels
+      el.style.setProperty('--qt-bl-panel-bg', surface);
+      el.style.setProperty('--qt-bl-head-bg', darkMode ? lighten(surface, 0.03) : darken(surface, 0.02));
+      // Help panel uses surface for BetterCanvas themes
+      el.style.setProperty('--qt-help-panel-bg', surface);
+      el.style.setProperty('--qt-help-head-bg', darkMode ? lighten(surface, 0.03) : darken(surface, 0.02));
+      // Explicitly clear any fallback-specific overrides that might have been set
       el.style.removeProperty('--qt-bl-item-bg');
       el.style.removeProperty('--qt-bl-item-hover-bg');
       el.style.removeProperty('--qt-bl-head-text');
@@ -442,7 +518,7 @@
       el.style.backgroundColor = surface;
     });
     
-    LOG("applyTokens: Applied tokens, surface:", surface, "text:", text, "accent:", accent, "darkMode:", darkMode);
+    LOG("applyTokens: Applied tokens, surface:", surface, "text:", text, "accent:", accent, "darkMode:", darkMode, "bc.has:", bc.has);
   }
 
   // Per-page gate: base state is "loading". We only allow rendering
@@ -591,10 +667,7 @@
 
     const helpBtn = document.getElementById(BTN_HELP_ID);
     if (helpBtn) {
-      helpBtn.onclick = () => {
-        // Placeholder for help functionality
-        LOG("help button clicked");
-      };
+      helpBtn.onclick = () => openHelpOverlay();
     }
 
     const sel = document.getElementById(SELECT_ID);
@@ -864,6 +937,8 @@
   }
 
   /* ---------------------- blacklist overlay (reliable) ---------------------- */
+  let blCloseTimeout = null;
+
   function ensureOverlay() {
     let overlay = document.getElementById(BL_OVERLAY_ID);
     if (overlay) return overlay;
@@ -893,7 +968,12 @@
 
     overlay.addEventListener("click", (e) => {
       if (e.target === overlay || e.target.id === "qt-bl-close") {
-        overlay.style.display = "none";
+        overlay.classList.remove("qt-overlay-visible");
+        if (blCloseTimeout) clearTimeout(blCloseTimeout);
+        blCloseTimeout = setTimeout(() => {
+          overlay.style.display = "none";
+          blCloseTimeout = null;
+        }, 200); // Wait for animation to complete
       }
     });
 
@@ -906,6 +986,12 @@
     LOG("open blacklist popup");
     const overlay = ensureOverlay();
     
+    // Clear any pending close timeout
+    if (blCloseTimeout) {
+      clearTimeout(blCloseTimeout);
+      blCloseTimeout = null;
+    }
+    
     // Ensure overlay has current theme tokens
     const sidebar = document.getElementById(WIDGET_ID);
     if (sidebar) {
@@ -913,6 +999,10 @@
     }
     
     overlay.style.display = "block";
+    // Trigger animation on next frame
+    requestAnimationFrame(() => {
+      overlay.classList.add("qt-overlay-visible");
+    });
     renderBlacklistList();
   }
 
@@ -996,6 +1086,122 @@
     handle.addEventListener("mousedown", onDown);
   }
 
+  /* ---------------------- help overlay ---------------------- */
+  let helpCloseTimeout = null;
+
+  function ensureHelpOverlay() {
+    let overlay = document.getElementById(HELP_OVERLAY_ID);
+    if (overlay) return overlay;
+
+    overlay = document.createElement("div");
+    overlay.id = HELP_OVERLAY_ID;
+
+    const panel = document.createElement("div");
+    panel.id = HELP_PANEL_ID;
+
+    panel.innerHTML = `
+      <div id="${HELP_HEAD_ID}">
+        <h4>QuackTask Help</h4>
+        <button type="button" id="qt-help-close" class="qtask-btn qtask-add">Close</button>
+      </div>
+      <div id="${HELP_CONTENT_ID}"></div>
+    `;
+
+    // Immediately sync theme tokens
+    const sidebar = document.getElementById(WIDGET_ID);
+    if (sidebar) {
+      copyTokensToOverlay(sidebar, overlay);
+    }
+
+    overlay.appendChild(panel);
+    document.documentElement.appendChild(overlay);
+
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay || e.target.id === "qt-help-close") {
+        overlay.classList.remove("qt-overlay-visible");
+        if (helpCloseTimeout) clearTimeout(helpCloseTimeout);
+        helpCloseTimeout = setTimeout(() => {
+          overlay.style.display = "none";
+          helpCloseTimeout = null;
+        }, 200); // Wait for animation to complete
+      }
+    });
+
+    makeDraggable(panel, $("#" + HELP_HEAD_ID, panel));
+
+    return overlay;
+  }
+
+  function openHelpOverlay() {
+    LOG("open help overlay");
+    const overlay = ensureHelpOverlay();
+    
+    // Clear any pending close timeout
+    if (helpCloseTimeout) {
+      clearTimeout(helpCloseTimeout);
+      helpCloseTimeout = null;
+    }
+    
+    // Ensure overlay has current theme tokens
+    const sidebar = document.getElementById(WIDGET_ID);
+    if (sidebar) {
+      copyTokensToOverlay(sidebar, overlay);
+    }
+    
+    overlay.style.display = "block";
+    // Trigger animation on next frame
+    requestAnimationFrame(() => {
+      overlay.classList.add("qt-overlay-visible");
+    });
+    renderHelpContent();
+  }
+
+  function renderHelpContent() {
+    const content = document.getElementById(HELP_CONTENT_ID);
+    if (!content) return;
+
+    content.innerHTML = `
+      <div class="qt-help-section">
+        <h5>What is QuackTask?</h5>
+        <p>QuackTask automatically syncs your Canvas assignments to Google Tasks, so you can stay organized without leaving Canvas.</p>
+      </div>
+
+      <div class="qt-help-section">
+        <h5>How to use</h5>
+        <ol class="qt-help-list">
+          <li><strong>Login:</strong> Click "Login" to connect your Google account.</li>
+          <li><strong>Select a list:</strong> Choose which Google Tasks list to sync assignments to.</li>
+          <li><strong>Add tasks:</strong> Click "Add" on any assignment to add it to Google Tasks.</li>
+          <li><strong>Manage tasks:</strong> Click "Delete" to remove from Google Tasks, or "Hide" to hide from the sidebar.</li>
+        </ol>
+      </div>
+
+      <div class="qt-help-section">
+        <h5>Features</h5>
+        <ul class="qt-help-list">
+          <li>Automatic assignment detection from Canvas</li>
+          <li>Sync to Google Tasks with one click</li>
+          <li>Prevents duplicate tasks</li>
+          <li>Hide assignments you don't want to see</li>
+          <li>View and restore hidden items from the Blacklist</li>
+        </ul>
+      </div>
+
+      <div class="qt-help-section">
+        <h5>Tips</h5>
+        <ul class="qt-help-list">
+          <li>Make sure you're on the Canvas home page for assignments to load</li>
+          <li>Hidden items are saved and won't reappear until you unhide them</li>
+          <li>Tasks are linked back to their Canvas assignment pages</li>
+        </ul>
+      </div>
+
+      <div class="qt-help-footer">
+        <p>QuackTask syncs Canvas assignments to Google Tasks for Stevens Institute students.</p>
+      </div>
+    `;
+  }
+
   /* ---------------------- observers ---------------------- */
   function watchForRerender() {
     const obs = new MutationObserver(() => {
@@ -1014,25 +1220,108 @@
     obs.observe(document.body, { childList: true, subtree: true });
   }
 
-  function watchBetterCanvasTheme() {
-    const themeStyle = document.getElementById('bettercanvas-theme-preset');
-    if (!themeStyle) return;
-
-    const obs = new MutationObserver(() => {
+  // Debounced token application to prevent excessive re-applications
+  let tokenApplyTimeout = null;
+  function debouncedApplyTokens() {
+    if (tokenApplyTimeout) {
+      clearTimeout(tokenApplyTimeout);
+    }
+    tokenApplyTimeout = setTimeout(() => {
       const sidebar = document.getElementById(WIDGET_ID);
       if (sidebar) {
+        LOG("Theme change detected, reapplying tokens");
         applyTokens(sidebar);
-        // Also update overlay if it exists
-        const overlay = document.getElementById(BL_OVERLAY_ID);
-        if (overlay) {
-          copyTokensToOverlay(sidebar, overlay);
+        // Also update overlays if they exist
+        const blOverlay = document.getElementById(BL_OVERLAY_ID);
+        if (blOverlay) {
+          copyTokensToOverlay(sidebar, blOverlay);
         }
+        const helpOverlay = document.getElementById(HELP_OVERLAY_ID);
+        if (helpOverlay) {
+          copyTokensToOverlay(sidebar, helpOverlay);
+        }
+      }
+      tokenApplyTimeout = null;
+    }, 50); // Small delay to batch rapid changes
+  }
+
+  function watchBetterCanvasTheme() {
+    // Watch BetterCanvas theme style element if it exists
+    const themeStyle = document.getElementById('bettercanvas-theme-preset');
+    if (themeStyle) {
+      const bcObs = new MutationObserver(() => {
+        debouncedApplyTokens();
+      });
+
+      bcObs.observe(themeStyle, {
+        attributes: true,
+        attributeFilter: ['style', 'class'],
+        childList: true,
+        subtree: true
+      });
+    }
+
+    // Watch document.body for attribute changes (BetterCanvas may change body styles/classes)
+    const bodyObs = new MutationObserver((mutations) => {
+      // Check if any mutation affects theme-related attributes
+      const hasThemeChange = mutations.some(mutation => {
+        if (mutation.type === 'attributes') {
+          const attrName = mutation.attributeName;
+          // Watch for style, class, data-theme, or any data-* attribute changes
+          return attrName === 'style' || 
+                 attrName === 'class' || 
+                 attrName === 'data-theme' ||
+                 (attrName && attrName.startsWith('data-'));
+        }
+        return false;
+      });
+      
+      if (hasThemeChange) {
+        debouncedApplyTokens();
       }
     });
 
-    obs.observe(themeStyle, {
+    bodyObs.observe(document.body, {
       attributes: true,
-      attributeFilter: ['style', 'class'],
+      attributeFilter: ['style', 'class', 'data-theme'],
+      subtree: false // Only watch body itself, not children
+    });
+
+    // Also watch document.documentElement (html) for theme attributes
+    const htmlObs = new MutationObserver((mutations) => {
+      const hasThemeChange = mutations.some(mutation => {
+        if (mutation.type === 'attributes') {
+          const attrName = mutation.attributeName;
+          return attrName === 'style' || 
+                 attrName === 'class' || 
+                 attrName === 'data-theme' ||
+                 (attrName && attrName.startsWith('data-'));
+        }
+        return false;
+      });
+      
+      if (hasThemeChange) {
+        debouncedApplyTokens();
+      }
+    });
+
+    htmlObs.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['style', 'class', 'data-theme'],
+      subtree: false
+    });
+
+    // Watch for BetterCanvas style element being added/removed
+    const styleObserver = new MutationObserver(() => {
+      const themeStyle = document.getElementById('bettercanvas-theme-preset');
+      const sidebar = document.getElementById(WIDGET_ID);
+      if (sidebar) {
+        // If BetterCanvas style element was added or removed, reapply tokens
+        debouncedApplyTokens();
+      }
+    });
+
+    styleObserver.observe(document.head || document.body, {
       childList: true,
       subtree: true
     });
@@ -1092,6 +1381,31 @@
         applyTokens(sidebar);
       }
     }, 2000);
+    
+    // Periodic check for theme changes (catches cases where observers might miss changes)
+    // This helps ensure theme resets when BetterCanvas is disabled
+    let lastBetterCanvasState = detectBetterCanvas().has;
+    setInterval(() => {
+      const sidebar = document.getElementById(WIDGET_ID);
+      if (!sidebar) return;
+      
+      const currentBetterCanvasState = detectBetterCanvas().has;
+      if (currentBetterCanvasState !== lastBetterCanvasState) {
+        LOG("BetterCanvas state changed:", lastBetterCanvasState, "->", currentBetterCanvasState);
+        lastBetterCanvasState = currentBetterCanvasState;
+        // Force full token reapplication when BetterCanvas state changes
+        applyTokens(sidebar);
+        // Update overlays
+        const blOverlay = document.getElementById(BL_OVERLAY_ID);
+        if (blOverlay) {
+          copyTokensToOverlay(sidebar, blOverlay);
+        }
+        const helpOverlay = document.getElementById(HELP_OVERLAY_ID);
+        if (helpOverlay) {
+          copyTokensToOverlay(sidebar, helpOverlay);
+        }
+      }
+    }, 1000); // Check every second
   }
 
   try {
