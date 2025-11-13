@@ -9,9 +9,13 @@ import { ensureTokenInteractive, clearAuth } from "./auth.js";
 
 // Keys
 const nameKeyOf = (t) =>
-  `${t.course || t.courseCode || ""} → ${t.assignment || ""}`;
+  `${t.course || t.courseName || t.courseCode || ""} → ${
+    t.assignment || t.title || ""
+  }`;
 const codeKeyOf = (t) =>
-  t && t.courseCode ? `${t.courseCode} → ${t.assignment || ""}` : null;
+  t && t.courseCode
+    ? `${t.courseCode} → ${t.assignment || t.title || ""}`
+    : null;
 
 // Selected list
 async function getSelectedListId() {
@@ -47,6 +51,8 @@ async function markInGoogleAndIndex(key, listId, taskId) {
     "scrapedData",
     "qt_google_index",
   ]);
+
+  // Prefer the current flagged cache so we don't lose _completed_in_google
   const tasks = Array.isArray(st.qt_tasks)
     ? st.qt_tasks
     : Array.isArray(st.scrapedData)
@@ -76,6 +82,8 @@ async function unmarkInGoogleAndIndex(key) {
     "scrapedData",
     "qt_google_index",
   ]);
+
+  // Same reasoning as above
   const tasks = Array.isArray(st.qt_tasks)
     ? st.qt_tasks
     : Array.isArray(st.scrapedData)
@@ -128,10 +136,10 @@ async function syncWithGoogleTasks() {
     "scrapedData",
     "qt_google_index",
   ]);
-  const tasks = Array.isArray(st.qt_tasks)
-    ? st.qt_tasks
-    : Array.isArray(st.scrapedData)
+  const tasks = Array.isArray(st.scrapedData)
     ? st.scrapedData
+    : Array.isArray(st.qt_tasks)
+    ? st.qt_tasks
     : [];
 
   if (!tasks.length) {
@@ -287,10 +295,10 @@ export async function route(msg) {
 
         // Find the task in local cache to grab due date
         const st = await chrome.storage.local.get(["qt_tasks", "scrapedData"]);
-        const tasks = Array.isArray(st.qt_tasks)
-          ? st.qt_tasks
-          : Array.isArray(st.scrapedData)
+        const tasks = Array.isArray(st.scrapedData)
           ? st.scrapedData
+          : Array.isArray(st.qt_tasks)
+          ? st.qt_tasks
           : [];
         const found = tasks.find(
           (t) => nameKeyOf(t) === key || codeKeyOf(t) === key
@@ -304,7 +312,7 @@ export async function route(msg) {
           listId,
           title: key || "Untitled", // Title is the key
           notes: notes || "", // Notes should be the Canvas URL
-          dueRFC3339, // ✅ put date back
+          dueRFC3339, // put date back
         });
 
         await markInGoogleAndIndex(key, listId, created.id);
