@@ -16,24 +16,59 @@ export async function ensureTokenInteractive(interactive = false) {
 }
 
 export async function clearAuth() {
-  // Best effort: remove current cached token and clear all cached tokens
+  const err = (...a) => console.error("[QuackTask/auth]", ...a);
+  
+  // Best effort: revoke OAuth grant, remove cached tokens, and clear local state
   try {
+    // Try to get the current token (non-interactive)
     const token = await getToken(false).catch(() => null);
+    
     if (token) {
-      await new Promise((resolve) =>
-        chrome.identity.removeCachedAuthToken({ token }, () => resolve())
-      );
+      // Remove the cached token
+      try {
+        await new Promise((resolve) =>
+          chrome.identity.removeCachedAuthToken({ token }, () => resolve())
+        );
+      } catch (e) {
+        err("Failed to remove cached auth token:", e);
+      }
+      
+      // Revoke the OAuth grant with Google
+      try {
+        await fetch(`https://accounts.google.com/o/oauth2/revoke?token=${token}`, {
+          method: "GET",
+        }).catch(() => {
+          // Ignore fetch errors - best effort revoke
+        });
+      } catch (e) {
+        err("Failed to revoke OAuth grant:", e);
+      }
     }
+    
+    // Clear all cached auth tokens
     if (chrome.identity.clearAllCachedAuthTokens) {
-      await new Promise((resolve) =>
-        chrome.identity.clearAllCachedAuthTokens(() => resolve())
-      );
+      try {
+        await new Promise((resolve) =>
+          chrome.identity.clearAllCachedAuthTokens(() => resolve())
+        );
+      } catch (e) {
+        err("Failed to clear all cached auth tokens:", e);
+      }
     }
-  } catch (_) {
-    // ignore
+  } catch (e) {
+    err("Error in clearAuth:", e);
   }
 
-  // Also drop any local state that assumes an authenticated session
-  await chrome.storage.local.remove(["qt_selected_list", "qt_google_index"]);
+  // Drop any local state that assumes an authenticated session
+  try {
+    await chrome.storage.local.remove([
+      "qt_selected_list",
+      "qt_google_index",
+      "qt_google_authed",
+    ]);
+  } catch (e) {
+    err("Failed to clear local storage:", e);
+  }
+  
   return true;
 }

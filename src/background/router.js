@@ -237,20 +237,48 @@ export async function route(msg) {
 
   switch (msg?.type) {
     case "LOGIN":
-      await ensureTokenInteractive(true);
-      return { success: true };
+      try {
+        await ensureTokenInteractive(true);
+        // Set logged-in flag after successful authentication
+        await chrome.storage.local.set({ qt_google_authed: true });
+        return { success: true };
+      } catch (e) {
+        log("LOGIN error:", e);
+        // Ensure flag is false on failure
+        await chrome.storage.local.set({ qt_google_authed: false });
+        return { success: false, error: String(e) };
+      }
 
     case "LOGOUT":
-      await clearAuth();
-      return { success: true };
+      try {
+        await clearAuth();
+        // Ensure flag is false after logout
+        await chrome.storage.local.set({ qt_google_authed: false });
+        return { success: true };
+      } catch (e) {
+        log("LOGOUT error:", e);
+        // Still set flag to false even if clearAuth had issues
+        await chrome.storage.local.set({ qt_google_authed: false });
+        return { success: false, error: String(e) };
+      }
 
     case "GET_GOOGLE_LISTS":
       try {
+        // Check if user is considered logged in
+        const st = await chrome.storage.local.get({ qt_google_authed: false });
+        if (!st.qt_google_authed) {
+          // User is not logged in - don't try to authenticate
+          return { success: false, authed: false, lists: [] };
+        }
+        
+        // User is logged in - try to get token and list tasks
         await ensureTokenInteractive(false);
         const lists = await listTaskLists();
         return { success: true, authed: true, lists };
       } catch (e) {
         log("GET_GOOGLE_LISTS error:", e);
+        // Token is bad or API failed - mark as logged out
+        await chrome.storage.local.set({ qt_google_authed: false });
         return { success: false, authed: false, lists: [] };
       }
 
@@ -281,15 +309,30 @@ export async function route(msg) {
 
     case "SYNC_WITH_GOOGLE_TASKS":
       try {
+        // Check if user is considered logged in
+        const st = await chrome.storage.local.get({ qt_google_authed: false });
+        if (!st.qt_google_authed) {
+          // User is not logged in - return early without trying to sync
+          return { ok: true, synced: 0, found: 0, authed: false };
+        }
+        
         return await syncWithGoogleTasks();
       } catch (e) {
         log("SYNC_WITH_GOOGLE_TASKS error:", e);
-        return { ok: false, error: String(e) };
+        // Token is bad or API failed - mark as logged out
+        await chrome.storage.local.set({ qt_google_authed: false });
+        return { ok: false, error: String(e), authed: false };
       }
 
     case "ADD_TO_GOOGLE_TASKS": {
       const { listId: incomingListId, key, notes, dueOverrideDate } = msg;
       try {
+        // Check if user is considered logged in
+        const authSt = await chrome.storage.local.get({ qt_google_authed: false });
+        if (!authSt.qt_google_authed) {
+          return { ok: false, error: "Not logged in. Please log in first." };
+        }
+        
         await ensureTokenInteractive(true);
         const listId = incomingListId || (await getSelectedListId());
 
@@ -333,6 +376,8 @@ export async function route(msg) {
         return { ok: true, taskId: created.id, listId };
       } catch (e) {
         log("ADD_TO_GOOGLE_TASKS error:", e);
+        // Token is bad or API failed - mark as logged out
+        await chrome.storage.local.set({ qt_google_authed: false });
         return { ok: false, error: String(e) };
       }
     }
@@ -340,6 +385,12 @@ export async function route(msg) {
     case "DELETE_FROM_GOOGLE_TASKS": {
       const { key, listId: incomingListId } = msg;
       try {
+        // Check if user is considered logged in
+        const authSt = await chrome.storage.local.get({ qt_google_authed: false });
+        if (!authSt.qt_google_authed) {
+          return { ok: false, error: "Not logged in. Please log in first." };
+        }
+        
         await ensureTokenInteractive(true);
         const st = await chrome.storage.local.get(["qt_google_index"]);
         const idx = st.qt_google_index || {};
@@ -374,6 +425,8 @@ export async function route(msg) {
         return { ok: true };
       } catch (e) {
         log("DELETE_FROM_GOOGLE_TASKS error:", e);
+        // Token is bad or API failed - mark as logged out
+        await chrome.storage.local.set({ qt_google_authed: false });
         return { ok: false, error: String(e) };
       }
     }
