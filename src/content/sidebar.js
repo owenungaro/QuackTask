@@ -805,10 +805,11 @@
 
   function taskRowHTML(t) {
     const inTasks = !!t._in_google_tasks;
+    const isGrading = !!(t.isGrading || (t.assignment && t.assignment.startsWith("Grade: ")));
     return `
       <div class="qtask-row" data-key="${taskKey(t)}" data-href="${
       t.href || ""
-    }">
+    }" data-grading="${isGrading ? "true" : "false"}">
         <div>
           <div class="qtask-title"><a href="${t.href || "#"}">${escapeHtml(
       t.assignment || "Untitled"
@@ -833,6 +834,16 @@
   async function onAddClick(e) {
     const row = e.currentTarget.closest(".qtask-row");
     if (!row) return;
+    
+    const isGrading = row.dataset.grading === "true";
+    
+    // For grading tasks, show date picker instead of immediately adding
+    if (isGrading) {
+      showGradingDatePicker(row);
+      return;
+    }
+    
+    // Normal flow for non-grading tasks
     greyRowButtons(row, true);
 
     try {
@@ -859,6 +870,120 @@
       }
     } catch (err) {
       LOG("add error", err);
+    } finally {
+      greyRowButtons(row, false);
+    }
+  }
+
+  function showGradingDatePicker(row) {
+    // Remove any existing date picker
+    const existing = row.querySelector(".qt-grading-date-picker");
+    if (existing) {
+      existing.remove();
+      return;
+    }
+
+    const actionsDiv = row.querySelector(".qtask-actions");
+    if (!actionsDiv) return;
+
+    // Create date picker container
+    const pickerContainer = document.createElement("div");
+    pickerContainer.className = "qt-grading-date-picker";
+    
+    const dateInput = document.createElement("input");
+    dateInput.type = "date";
+    dateInput.className = "qt-date-input";
+    
+    const buttonContainer = document.createElement("div");
+    buttonContainer.className = "qt-date-buttons";
+    
+    const confirmBtn = document.createElement("button");
+    confirmBtn.className = "qtask-btn qtask-add";
+    confirmBtn.textContent = "Confirm";
+    
+    const noDateBtn = document.createElement("button");
+    noDateBtn.className = "qtask-btn qtask-del";
+    noDateBtn.textContent = "No Due Date";
+    
+    const cancelBtn = document.createElement("button");
+    cancelBtn.className = "qtask-btn qtask-hide";
+    cancelBtn.textContent = "Cancel";
+    
+    buttonContainer.appendChild(confirmBtn);
+    buttonContainer.appendChild(noDateBtn);
+    buttonContainer.appendChild(cancelBtn);
+    
+    pickerContainer.appendChild(dateInput);
+    pickerContainer.appendChild(buttonContainer);
+    
+    // Insert after the actions div
+    actionsDiv.parentNode.insertBefore(pickerContainer, actionsDiv.nextSibling);
+    
+    // Focus the date input
+    setTimeout(() => dateInput.focus(), 10);
+    
+    // Confirm handler
+    confirmBtn.addEventListener("click", async () => {
+      const dateValue = dateInput.value.trim();
+      
+      // Validate date if provided
+      if (dateValue) {
+        const date = new Date(dateValue);
+        if (isNaN(date.getTime())) {
+          LOG("Invalid date:", dateValue);
+          return;
+        }
+      }
+      
+      await addGradingTask(row, dateValue || null);
+      pickerContainer.remove();
+    });
+    
+    // No due date handler
+    noDateBtn.addEventListener("click", async () => {
+      await addGradingTask(row, null);
+      pickerContainer.remove();
+    });
+    
+    // Cancel handler
+    cancelBtn.addEventListener("click", () => {
+      pickerContainer.remove();
+    });
+  }
+
+  async function addGradingTask(row, dueOverrideDate) {
+    greyRowButtons(row, true);
+
+    try {
+      const listId = $("#" + SELECT_ID)?.value || null;
+      const key = row.dataset.key;
+      const notes = row.dataset.href
+        ? new URL(row.dataset.href, location.origin).href
+        : "";
+
+      const payload = {
+        type: "ADD_TO_GOOGLE_TASKS",
+        listId,
+        notes,
+        key,
+      };
+      
+      // Add dueOverrideDate if provided (null or string)
+      if (dueOverrideDate !== undefined) {
+        payload.dueOverrideDate = dueOverrideDate;
+      }
+
+      const resp = await sendBg(payload);
+      if (resp && resp.ok) {
+        row.querySelector(
+          ".qtask-actions"
+        ).innerHTML = `<button class="qtask-btn qtask-del" data-act="del">Delete</button>`;
+        row
+          .querySelector("[data-act='del']")
+          .addEventListener("click", onDeleteClick);
+      }
+    } catch (err) {
+      LOG("add grading task error", err);
     } finally {
       greyRowButtons(row, false);
     }
