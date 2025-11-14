@@ -18,21 +18,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // Handle extension icon click
 chrome.action.onClicked.addListener(async () => {
-  const canvasUrl = "https://sit.instructure.com/";
+  const defaultCanvasUrl = "https://canvas.instructure.com/";
   
   try {
-    // Query for existing tabs with sit.instructure.com
-    const tabs = await chrome.tabs.query({ url: "https://sit.instructure.com/*" });
+    // Query for existing tabs with any Canvas instance
+    const tabs = await chrome.tabs.query({ url: "*://*.instructure.com/*" });
     
     if (tabs.length > 0) {
-      // If a Canvas tab exists, bring it to the front
-      const tab = tabs[0];
+      // If Canvas tabs exist, focus the most recently active one
+      // Sort by last accessed time (if available) or just use the first one
+      const sortedTabs = tabs.sort((a, b) => {
+        // Prefer tabs with lastAccessed (Chrome API)
+        if (a.lastAccessed && b.lastAccessed) {
+          return b.lastAccessed - a.lastAccessed;
+        }
+        return 0;
+      });
+      const tab = sortedTabs[0];
       await chrome.tabs.update(tab.id, { active: true });
       await chrome.windows.update(tab.windowId, { focused: true });
-      console.log("[QuackTask/bg] Focused existing Canvas tab:", tab.id);
+      console.log("[QuackTask/bg] Focused existing Canvas tab:", tab.id, tab.url);
     } else {
-      // Otherwise, open a new tab
-      const newTab = await chrome.tabs.create({ url: canvasUrl });
+      // Otherwise, open a new tab to default Canvas URL
+      const newTab = await chrome.tabs.create({ url: defaultCanvasUrl });
       console.log("[QuackTask/bg] Opened new Canvas tab:", newTab.id);
     }
   } catch (e) {

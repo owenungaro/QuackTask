@@ -5,7 +5,7 @@
   "description": "Sync your Canvas tasks with Google Tasks to stay organized and on top of your assignments effortlessly.",
   "permissions": ["scripting", "activeTab", "storage", "identity", "tabs"],
   "host_permissions": [
-    "https://sit.instructure.com/*",
+    "*://*.instructure.com/*",
     "https://www.googleapis.com/*"
   ],
   "background": {
@@ -17,7 +17,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://sit.instructure.com/*"],
+      "matches": ["*://*.instructure.com/*"],
       "js": ["src/content/content.js", "src/content/sidebar.js"],
       "css": ["src/styles/sidebar.css"],
       "run_at": "document_idle"

@@ -4,11 +4,27 @@
   const HOME_OK = (() => {
     try {
       const u = new URL(location.href);
-      return (
-        u.origin === "https://sit.instructure.com" &&
-        (u.pathname === "/" ||
-          (u.pathname === "/" && u.search.includes("login_success=1")))
-      );
+      // Check that host is a Canvas instance (for now, Instructure-hosted)
+      const isCanvasHost = u.hostname.endsWith(".instructure.com");
+      if (!isCanvasHost) return false;
+      
+      // Check that we're on the dashboard path
+      const isDashboardPath = u.pathname === "/";
+      if (!isDashboardPath) return false;
+      
+      // Additional safety: check for Canvas DOM markers if available
+      // This helps avoid false positives on non-Canvas pages
+      if (document.body) {
+        const hasCanvasBody = document.body.classList.contains("ic-app");
+        const hasDashboardCards = document.querySelector(".ic-DashboardCard") !== null;
+        // If DOM is loaded, require at least one Canvas marker
+        if (document.readyState !== "loading") {
+          return hasCanvasBody || hasDashboardCards;
+        }
+      }
+      
+      // If DOM isn't ready yet, trust the URL check
+      return true;
     } catch {
       return false;
     }

@@ -22,11 +22,6 @@
   const HELP_HEAD_ID = "qt-help-head";
   const HELP_CONTENT_ID = "qt-help-content";
 
-  const DASH_URLS = [
-    "https://sit.instructure.com/",
-    "https://sit.instructure.com/?login_success=1",
-  ];
-
   const LOG = (...a) => console.log("[QuackTask]", ...a);
   const $ = (sel, root = document) => root.querySelector(sel);
 
@@ -526,7 +521,33 @@
   let PAGE_GATE_OPEN = false;
 
   /* ---------------------- small utils ---------------------- */
-  const onDashboard = () => DASH_URLS.some((u) => location.href === u);
+  const onDashboard = () => {
+    try {
+      const u = new URL(location.href);
+      // Check that host is a Canvas instance (for now, Instructure-hosted)
+      const isCanvasHost = u.hostname.endsWith(".instructure.com");
+      if (!isCanvasHost) return false;
+      
+      // Check that we're on the dashboard path
+      const isDashboardPath = u.pathname === "/";
+      if (!isDashboardPath) return false;
+      
+      // Additional safety: check for Canvas DOM markers if available
+      if (document.body) {
+        const hasCanvasBody = document.body.classList.contains("ic-app");
+        const hasDashboardCards = document.querySelector(".ic-DashboardCard") !== null;
+        // If DOM is loaded, require at least one Canvas marker
+        if (document.readyState !== "loading") {
+          return hasCanvasBody || hasDashboardCards;
+        }
+      }
+      
+      // If DOM isn't ready yet, trust the URL check
+      return true;
+    } catch {
+      return false;
+    }
+  };
   const rightAside = () => document.getElementById("right-side");
 
   const sendBg = (payload) =>
