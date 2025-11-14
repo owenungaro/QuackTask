@@ -1360,7 +1360,7 @@
       </div>
 
       <div class="qt-help-footer">
-        <p>QuackTask syncs Canvas assignments to Google Tasks for Stevens Institute students.</p>
+        <p>Built and maintained by <a href="https://owenungaro.com/" target="_blank">Owen Ungaro</a>.</p>
       </div>
     `;
   }
