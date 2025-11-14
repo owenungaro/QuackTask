@@ -366,6 +366,7 @@
       href,
       rfc3339Due,
       dueText: rfc3339Due ? prettyDate(rfc3339Due) : "Grading needed",
+      isGrading: true,
     };
   }
 })();

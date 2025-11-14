@@ -592,3 +592,49 @@
   color: var(--qt-subtle, #6b7280);
   text-align: center;
 }
+
+/* ---------- Grading date picker ---------- */
+.qt-grading-date-picker {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid var(--qt-border, #e5e7eb);
+  border-radius: 8px;
+  background: var(--qt-surface, #ffffff);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.qt-date-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--qt-border, #e5e7eb);
+  border-radius: 6px;
+  background: var(--qt-dd-bg, #ffffff);
+  color: var(--qt-dd-text, #111827);
+  font-size: 13px;
+  font-family: inherit;
+  transition: all 0.2s ease-out;
+}
+
+.qt-date-input:hover {
+  border-color: var(--qt-accent, #9d1535);
+}
+
+.qt-date-input:focus {
+  outline: none;
+  border-color: var(--qt-accent, #9d1535);
+  box-shadow: 0 0 0 2px var(--qt-shadow, rgba(157, 21, 53, 0.1));
+}
+
+.qt-date-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.qt-date-buttons .qtask-btn {
+  flex: 1;
+  min-width: 80px;
+}

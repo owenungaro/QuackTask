@@ -288,25 +288,39 @@ export async function route(msg) {
       }
 
     case "ADD_TO_GOOGLE_TASKS": {
-      const { listId: incomingListId, key, notes } = msg;
+      const { listId: incomingListId, key, notes, dueOverrideDate } = msg;
       try {
         await ensureTokenInteractive(true);
         const listId = incomingListId || (await getSelectedListId());
 
-        // Find the task in local cache to grab due date
-        const st = await chrome.storage.local.get(["qt_tasks", "scrapedData"]);
-        const tasks = Array.isArray(st.scrapedData)
-          ? st.scrapedData
-          : Array.isArray(st.qt_tasks)
-          ? st.qt_tasks
-          : [];
-        const found = tasks.find(
-          (t) => nameKeyOf(t) === key || codeKeyOf(t) === key
-        );
-        const dueRFC3339 =
-          found?.rfc3339Due && typeof found.rfc3339Due === "string"
-            ? toLocalDateOnlyRFC3339(found.rfc3339Due) // ensures the *day* is correct; Tasks ignores time
-            : undefined;
+        let dueRFC3339 = undefined;
+
+        // If dueOverrideDate is provided, use it (takes priority)
+        if (dueOverrideDate !== undefined) {
+          if (dueOverrideDate === null) {
+            // Explicitly no due date
+            dueRFC3339 = undefined;
+          } else if (typeof dueOverrideDate === "string" && dueOverrideDate.trim()) {
+            // Convert YYYY-MM-DD to RFC3339
+            // The date input gives us YYYY-MM-DD, we need to convert to ISO and then to local date-only RFC3339
+            const isoString = `${dueOverrideDate.trim()}T00:00:00`;
+            dueRFC3339 = toLocalDateOnlyRFC3339(isoString);
+          }
+        } else {
+          // Fall back to original behavior: find the task in local cache to grab due date
+          const st = await chrome.storage.local.get(["qt_tasks", "scrapedData"]);
+          const tasks = Array.isArray(st.scrapedData)
+            ? st.scrapedData
+            : Array.isArray(st.qt_tasks)
+            ? st.qt_tasks
+            : [];
+          const found = tasks.find(
+            (t) => nameKeyOf(t) === key || codeKeyOf(t) === key
+          );
+          if (found?.rfc3339Due && typeof found.rfc3339Due === "string") {
+            dueRFC3339 = toLocalDateOnlyRFC3339(found.rfc3339Due); // ensures the *day* is correct; Tasks ignores time
+          }
+        }
 
         const created = await createTask({
           listId,
