@@ -98,7 +98,16 @@
       }
     }
 
-    const data = planner.length ? planner : domFallback;
+    let grading = [];
+    try {
+      grading = await fetchGradingTodos({ verbose: true, courseNameMapping });
+      log("Grading todos items:", grading.length, grading);
+    } catch (e) {
+      err("Grading todos failed:", e);
+    }
+
+    const baseAssignments = planner.length ? planner : domFallback;
+    const data = baseAssignments.concat(grading);
     log("Final scraped set:", data.length);
 
     try {
@@ -301,5 +310,62 @@
     });
 
     return items;
+  }
+
+  async function fetchGradingTodos({
+    verbose = false,
+    courseNameMapping = { byId: {}, byCode: {} },
+  } = {}) {
+    const base = `${location.origin}/api/v1/users/self/todo?per_page=100`;
+
+    let items = [];
+    try {
+      items = await getAllPages(base, { verbose });
+    } catch (e) {
+      if (verbose) err("Grading todos API failed:", e);
+      return [];
+    }
+
+    if (verbose) log("Todo API raw length:", items.length, items.slice(0, 5));
+
+    const gradingItems = items.filter(
+      (it) => it.type && it.type.toLowerCase() === "grading"
+    );
+
+    if (verbose) log("Grading items filtered:", gradingItems.length);
+
+    const mapped = gradingItems.map((item) =>
+      mapGradingTodoToCard(item, courseNameMapping)
+    );
+    if (verbose)
+      log("Grading todos mapped length:", mapped.length, mapped.slice(0, 5));
+    return mapped;
+  }
+
+  function mapGradingTodoToCard(
+    item,
+    courseNameMapping = { byId: {}, byCode: {} }
+  ) {
+    const assignmentObj = item.assignment || {};
+    const title = (assignmentObj.name || "").trim();
+    const href = absolutize(assignmentObj.html_url || item.html_url || "");
+    const rfc3339Due = assignmentObj.due_at || null;
+
+    const courseId = String(assignmentObj.course_id || "");
+    let course =
+      (courseId && courseNameMapping.byId[courseId]) ||
+      (item.context_name || "").trim() ||
+      "";
+
+    const courseCode = (item.context_name || "").trim();
+
+    return {
+      course,
+      courseCode,
+      assignment: `Grade: ${title}`,
+      href,
+      rfc3339Due,
+      dueText: rfc3339Due ? prettyDate(rfc3339Due) : "Grading needed",
+    };
   }
 })();
