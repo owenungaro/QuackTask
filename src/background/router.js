@@ -1,4 +1,6 @@
 // src/background/router.js
+const DEBUG = false; // Set to true for development logging
+
 import {
   listTaskLists,
   createTask,
@@ -233,7 +235,8 @@ async function syncWithGoogleTasks() {
 }
 
 export async function route(msg) {
-  const log = (...a) => console.log("[QuackTask/bg]", ...a);
+  const info = (...a) => console.log("[QuackTask/bg]", ...a); // Basic operational info - always shown
+  const log = (...a) => { if (DEBUG) console.log("[QuackTask/bg]", ...a); }; // Verbose debug - only if DEBUG
 
   switch (msg?.type) {
     case "LOGIN":
@@ -241,9 +244,10 @@ export async function route(msg) {
         await ensureTokenInteractive(true);
         // Set logged-in flag after successful authentication
         await chrome.storage.local.set({ qt_google_authed: true });
+        info("Login successful");
         return { success: true };
       } catch (e) {
-        log("LOGIN error:", e);
+        console.error("[QuackTask/bg] LOGIN error:", e);
         // Ensure flag is false on failure
         await chrome.storage.local.set({ qt_google_authed: false });
         return { success: false, error: String(e) };
@@ -254,9 +258,10 @@ export async function route(msg) {
         await clearAuth();
         // Ensure flag is false after logout
         await chrome.storage.local.set({ qt_google_authed: false });
+        info("Logout successful");
         return { success: true };
       } catch (e) {
-        log("LOGOUT error:", e);
+        console.error("[QuackTask/bg] LOGOUT error:", e);
         // Still set flag to false even if clearAuth had issues
         await chrome.storage.local.set({ qt_google_authed: false });
         return { success: false, error: String(e) };
@@ -274,9 +279,10 @@ export async function route(msg) {
         // User is logged in - try to get token and list tasks
         await ensureTokenInteractive(false);
         const lists = await listTaskLists();
+        if (DEBUG) log(`Loaded ${lists.length} Google Task lists`);
         return { success: true, authed: true, lists };
       } catch (e) {
-        log("GET_GOOGLE_LISTS error:", e);
+        console.error("[QuackTask/bg] GET_GOOGLE_LISTS error:", e);
         // Token is bad or API failed - mark as logged out
         await chrome.storage.local.set({ qt_google_authed: false });
         return { success: false, authed: false, lists: [] };
@@ -300,9 +306,10 @@ export async function route(msg) {
           await chrome.storage.local.set({ qt_ready: true });
         }
 
+        info(`Stored ${data.length} scraped items, synced ${res?.synced || 0}, found ${res?.found || 0} in Google Tasks`);
         return { ok: true, synced: res?.synced || 0, found: res?.found || 0 };
       } catch (e) {
-        log("STORE_SCRAPED_DATA error:", e);
+        console.error("[QuackTask/bg] STORE_SCRAPED_DATA error:", e);
         return { ok: false, error: String(e) };
       }
     }
@@ -316,9 +323,11 @@ export async function route(msg) {
           return { ok: true, synced: 0, found: 0, authed: false };
         }
         
-        return await syncWithGoogleTasks();
+        const result = await syncWithGoogleTasks();
+        info(`Sync complete: ${result.found || 0} tasks found in Google Tasks`);
+        return result;
       } catch (e) {
-        log("SYNC_WITH_GOOGLE_TASKS error:", e);
+        console.error("[QuackTask/bg] SYNC_WITH_GOOGLE_TASKS error:", e);
         // Token is bad or API failed - mark as logged out
         await chrome.storage.local.set({ qt_google_authed: false });
         return { ok: false, error: String(e), authed: false };
@@ -373,9 +382,10 @@ export async function route(msg) {
         });
 
         await markInGoogleAndIndex(key, listId, created.id);
+        info(`Added task to Google Tasks: ${key}`);
         return { ok: true, taskId: created.id, listId };
       } catch (e) {
-        log("ADD_TO_GOOGLE_TASKS error:", e);
+        console.error("[QuackTask/bg] ADD_TO_GOOGLE_TASKS error:", e);
         // Token is bad or API failed - mark as logged out
         await chrome.storage.local.set({ qt_google_authed: false });
         return { ok: false, error: String(e) };
@@ -422,9 +432,10 @@ export async function route(msg) {
         }
 
         await unmarkInGoogleAndIndex(key);
+        info(`Deleted task from Google Tasks: ${key}`);
         return { ok: true };
       } catch (e) {
-        log("DELETE_FROM_GOOGLE_TASKS error:", e);
+        console.error("[QuackTask/bg] DELETE_FROM_GOOGLE_TASKS error:", e);
         // Token is bad or API failed - mark as logged out
         await chrome.storage.local.set({ qt_google_authed: false });
         return { ok: false, error: String(e) };
@@ -443,9 +454,10 @@ export async function route(msg) {
           blacklist.push(assignment);
           await chrome.storage.local.set({ qt_blacklist: blacklist });
         }
+        if (DEBUG) log("Added to blacklist:", assignment);
         return { ok: true };
       } catch (e) {
-        log("ADD_BLACKLIST error:", e);
+        console.error("[QuackTask/bg] ADD_BLACKLIST error:", e);
         return { ok: false, error: String(e) };
       }
     }
@@ -460,9 +472,10 @@ export async function route(msg) {
         const blacklist = Array.isArray(st.qt_blacklist) ? st.qt_blacklist : [];
         const filtered = blacklist.filter((item) => item !== assignment);
         await chrome.storage.local.set({ qt_blacklist: filtered });
+        if (DEBUG) log("Removed from blacklist:", assignment);
         return { ok: true };
       } catch (e) {
-        log("REMOVE_BLACKLIST error:", e);
+        console.error("[QuackTask/bg] REMOVE_BLACKLIST error:", e);
         return { ok: false, error: String(e) };
       }
     }
@@ -473,7 +486,7 @@ export async function route(msg) {
         const blacklist = Array.isArray(st.qt_blacklist) ? st.qt_blacklist : [];
         return blacklist;
       } catch (e) {
-        log("GET_BLACKLIST error:", e);
+        console.error("[QuackTask/bg] GET_BLACKLIST error:", e);
         return [];
       }
     }

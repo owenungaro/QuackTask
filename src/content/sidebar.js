@@ -2,6 +2,8 @@
 // QuackTask Canvas sidebar (content script)
 
 (() => {
+  const DEBUG = false; // Set to true for development logging
+  
   /* ---------------------- constants / ids ---------------------- */
   const WIDGET_ID = "quacktask-sidebar";
   const BODY_ID = "quacktask-body";
@@ -22,7 +24,8 @@
   const HELP_HEAD_ID = "qt-help-head";
   const HELP_CONTENT_ID = "qt-help-content";
 
-  const LOG = (...a) => console.log("[QuackTask]", ...a);
+  const INFO = (...a) => console.log("[QuackTask]", ...a); // Basic operational info - always shown
+  const LOG = (...a) => { if (DEBUG) console.log("[QuackTask]", ...a); }; // Verbose debug - only if DEBUG
   const $ = (sel, root = document) => root.querySelector(sel);
 
   /* ---------------------- theme engine ---------------------- */
@@ -273,7 +276,7 @@
   function applyTokens(root) {
     const el = root || document.getElementById(WIDGET_ID);
     if (!el) {
-      LOG("applyTokens: element not found");
+      if (DEBUG) LOG("applyTokens: element not found");
       return;
     }
     
@@ -282,7 +285,7 @@
     
     // Force fresh detection - re-read all computed styles
     const bc = detectBetterCanvas();
-    LOG("applyTokens: BetterCanvas detected:", bc.has, bc);
+    if (DEBUG) LOG("applyTokens: BetterCanvas detected:", bc.has, bc);
 
     const MAROON = '#9D1535';
     const SURF_LIGHT = '#ffffff';
@@ -316,7 +319,7 @@
       ddText = getCssVar(document.body, '--bctext-1') || SUB_L;
 
       const darkMode = isDarkByText(text);
-      LOG("applyTokens: BetterCanvas darkMode:", darkMode, "text:", text);
+      if (DEBUG) LOG("applyTokens: BetterCanvas darkMode:", darkMode, "text:", text);
       border = darkMode ? 'rgba(255,255,255,0.12)' : BORDER_L;
       scrim = darkMode ? 'rgba(0,0,0,0.35)' : 'rgba(17,24,39,0.24)';
       shadow = darkMode ? 'rgba(0,0,0,0.35)' : 'rgba(157,21,53,0.12)';
@@ -328,7 +331,7 @@
     } else {
       // Fallback (no BetterCanvas) — detect dark mode from page
       const isDark = detectDarkModeFallback();
-      LOG("applyTokens: Fallback mode, isDark:", isDark);
+      if (DEBUG) LOG("applyTokens: Fallback mode, isDark:", isDark);
 
       surface = isDark ? SURF_DARK : SURF_LIGHT;
       text = isDark ? TEXT_D : TEXT_L;
@@ -347,7 +350,8 @@
 
     // Ensure we have valid color values
     if (!surface || !text || !accent) {
-      LOG("applyTokens: Warning - missing color values", { surface, text, accent });
+      // Keep this as a warning since it indicates a real problem
+      console.warn("[QuackTask] applyTokens: Warning - missing color values", { surface, text, accent });
       return;
     }
 
@@ -493,17 +497,17 @@
       // or when contrast between text and background is low
       needsTextShadow = isMidTone || (lowContrast && btnBgLum > 50 && btnBgLum < 210);
       
-      LOG("Text shadow check: btnBg=", btnBg, "btnBgLum=", btnBgLum, 
+      if (DEBUG) LOG("Text shadow check: btnBg=", btnBg, "btnBgLum=", btnBgLum, 
           "btnTextLum=", btnTextLum, "contrast=", contrast.toFixed(1),
           "isMidTone=", isMidTone, "needsTextShadow=", needsTextShadow);
     }
     
     if (needsTextShadow) {
       el.classList.add('qt-has-textshadow');
-      LOG("Added qt-has-textshadow class to sidebar");
+      if (DEBUG) LOG("Added qt-has-textshadow class to sidebar");
     } else {
       el.classList.remove('qt-has-textshadow');
-      LOG("Removed qt-has-textshadow class from sidebar");
+      if (DEBUG) LOG("Removed qt-has-textshadow class from sidebar");
     }
     
     // Force background update - CSS uses var(--qt-surface) which should pick this up
@@ -513,7 +517,7 @@
       el.style.backgroundColor = surface;
     });
     
-    LOG("applyTokens: Applied tokens, surface:", surface, "text:", text, "accent:", accent, "darkMode:", darkMode, "bc.has:", bc.has);
+    if (DEBUG) LOG("applyTokens: Applied tokens, surface:", surface, "text:", text, "accent:", accent, "darkMode:", darkMode, "bc.has:", bc.has);
   }
 
   // Per-page gate: base state is "loading". We only allow rendering
@@ -609,7 +613,7 @@
     `;
 
     parent.prepend(wrap);
-    LOG("sidebar boot @", location.href);
+    INFO("sidebar boot @", location.href);
 
     // Make the body scrollable so the page doesn't grow forever
     const body = document.getElementById(BODY_ID);
@@ -664,7 +668,7 @@
     if (authBtn) {
       authBtn.onclick = async () => {
         const mode = authBtn.dataset.mode;
-        LOG("auth button clicked:", mode);
+        if (DEBUG) LOG("auth button clicked:", mode);
         if (mode === "login") {
           const resp = await sendBg({ type: "LOGIN" });
           if (resp?.success) {
@@ -747,23 +751,24 @@
           await sendBg({ type: "SYNC_WITH_GOOGLE_TASKS" });
           renderFromStorage(); // Refresh the display
         } catch (e) {
-          LOG("Sync after list change failed:", e);
+          console.error("[QuackTask] Sync after list change failed:", e);
         }
       });
 
       // Trigger initial sync if authed (dropdown still hidden until ready)
       if (lists.length > 0) {
         try {
+          INFO("Syncing with Google Tasks...");
           await sendBg({ type: "SYNC_WITH_GOOGLE_TASKS" });
           renderFromStorage();
         } catch (e) {
-          LOG("Initial sync failed:", e);
+          console.error("[QuackTask] Initial sync failed:", e);
         }
       }
 
       return true;
     } catch (e) {
-      LOG("fillTaskLists error", e);
+      console.error("[QuackTask] fillTaskLists error", e);
       return false;
     }
   }
@@ -796,7 +801,14 @@
           : [];
 
         const blacklist = new Set(st.qt_blacklist || []);
-        LOG("render tasks count:", tasks.length, "blacklist:", blacklist.size);
+        if (DEBUG) LOG("render tasks count:", tasks.length, "blacklist:", blacklist.size);
+        // Show basic info about what's being rendered
+        if (tasks.length > 0) {
+          const visible = tasks.filter((t) => !blacklist.has(taskKey(t)) && !t._completed_in_google);
+          if (visible.length !== tasks.length || DEBUG) {
+            INFO(`Rendering ${visible.length} of ${tasks.length} tasks`);
+          }
+        }
 
         if (!tasks.length) {
           body.innerHTML = `<div class="qtask-empty">Nothing to show.</div>`;
@@ -890,7 +902,7 @@
           .addEventListener("click", onDeleteClick);
       }
     } catch (err) {
-      LOG("add error", err);
+      console.error("[QuackTask] add error", err);
     } finally {
       greyRowButtons(row, false);
     }
@@ -951,7 +963,7 @@
       if (dateValue) {
         const date = new Date(dateValue);
         if (isNaN(date.getTime())) {
-          LOG("Invalid date:", dateValue);
+          if (DEBUG) LOG("Invalid date:", dateValue);
           return;
         }
       }
@@ -1004,7 +1016,7 @@
           .addEventListener("click", onDeleteClick);
       }
     } catch (err) {
-      LOG("add grading task error", err);
+      console.error("[QuackTask] add grading task error", err);
     } finally {
       greyRowButtons(row, false);
     }
@@ -1035,7 +1047,8 @@
           .querySelector("[data-act='hide']")
           .addEventListener("click", onHideClick);
       } else {
-        LOG("delete failed:", resp?.error || "Unknown error");
+        // Keep error logging for failed deletes
+        console.error("[QuackTask] delete failed:", resp?.error || "Unknown error");
         const errTxt = String(resp?.error || "");
         // treat not-found or 404/410 as already-deleted
         if (
@@ -1056,7 +1069,7 @@
         }
       }
     } catch (err) {
-      LOG("delete error", err);
+      console.error("[QuackTask] delete error", err);
     } finally {
       greyRowButtons(row, false);
     }
@@ -1073,10 +1086,10 @@
       if (resp && resp.ok) {
         row.remove();
       } else {
-        LOG("hide error", resp?.error || "Unknown error");
+        if (DEBUG) LOG("hide error", resp?.error || "Unknown error");
       }
     } catch (err) {
-      LOG("hide error", err);
+      if (DEBUG) LOG("hide error", err);
     } finally {
       greyRowButtons(row, false);
     }
@@ -1129,7 +1142,7 @@
   }
 
   function openBlacklistOverlay() {
-    LOG("open blacklist popup");
+    if (DEBUG) LOG("open blacklist popup");
     const overlay = ensureOverlay();
     
     // Clear any pending close timeout
@@ -1159,7 +1172,7 @@
 
     try {
       const items = await sendBg({ type: "GET_BLACKLIST" });
-      LOG("renderBlacklistPopup: items =", items);
+      if (DEBUG) LOG("renderBlacklistPopup: items =", items);
 
       if (!items || !items.length) {
         list.innerHTML = `<div class="qtask-subtle">No hidden items.</div>`;
@@ -1185,7 +1198,7 @@
         });
       });
     } catch (e) {
-      LOG("renderBlacklistPopup error", e);
+      console.error("[QuackTask] renderBlacklistPopup error", e);
       list.innerHTML = `<div class="qtask-subtle">Failed to load blacklist.</div>`;
     }
   }
@@ -1296,7 +1309,7 @@
   }
 
   function openHelpOverlay() {
-    LOG("open help overlay");
+    if (DEBUG) LOG("open help overlay");
     const overlay = ensureHelpOverlay();
     
     // Clear any pending close timeout
@@ -1370,7 +1383,7 @@
     const obs = new MutationObserver(() => {
       const parent = rightAside();
       if (parent && !document.getElementById(WIDGET_ID) && onDashboard()) {
-        LOG("sidebar re-attaching after Canvas re-render");
+        if (DEBUG) LOG("sidebar re-attaching after Canvas re-render");
         mountShell(parent);
         renderFromStorage();
         // Tokens are applied in mountShell, but ensure they're applied here too
@@ -1392,7 +1405,7 @@
     tokenApplyTimeout = setTimeout(() => {
       const sidebar = document.getElementById(WIDGET_ID);
       if (sidebar) {
-        LOG("Theme change detected, reapplying tokens");
+        if (DEBUG) LOG("Theme change detected, reapplying tokens");
         applyTokens(sidebar);
         // Also update overlays if they exist
         const blOverlay = document.getElementById(BL_OVERLAY_ID);
@@ -1540,7 +1553,7 @@
     setTimeout(() => {
       const sidebar = document.getElementById(WIDGET_ID);
       if (sidebar) {
-        LOG("Final token application retry");
+        if (DEBUG) LOG("Final token application retry");
         applyTokens(sidebar);
       }
     }, 2000);
@@ -1554,7 +1567,7 @@
       
       const currentBetterCanvasState = detectBetterCanvas().has;
       if (currentBetterCanvasState !== lastBetterCanvasState) {
-        LOG("BetterCanvas state changed:", lastBetterCanvasState, "->", currentBetterCanvasState);
+        if (DEBUG) LOG("BetterCanvas state changed:", lastBetterCanvasState, "->", currentBetterCanvasState);
         lastBetterCanvasState = currentBetterCanvasState;
         // Force full token reapplication when BetterCanvas state changes
         applyTokens(sidebar);
@@ -1574,6 +1587,6 @@
   try {
     boot();
   } catch (e) {
-    LOG("boot error", e);
+    console.error("[QuackTask] boot error", e);
   }
 })();

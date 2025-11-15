@@ -1,20 +1,26 @@
 // Service worker entry
+const DEBUG = false; // Set to true for development logging
+
 import { route as handleMessage } from "./router.js";
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     try {
-      console.log("[QuackTask/bg] msg in:", message?.type, message);
+      if (DEBUG) console.log("[QuackTask/bg] msg in:", message?.type, message);
       const result = await handleMessage(message, sender);
-      console.log("[QuackTask/bg] msg out:", message?.type, result);
+      if (DEBUG) console.log("[QuackTask/bg] msg out:", message?.type, result);
       sendResponse(result);
     } catch (e) {
+      // Keep error logging - this is critical
       console.error("[QuackTask/bg] msg error:", message?.type, e);
       sendResponse({ ok: false, error: e?.message || "Unhandled" });
     }
   })();
   return true; // keep channel open for async
 });
+
+// Log when service worker starts
+console.log("[QuackTask/bg] Service worker initialized");
 
 // Handle extension icon click
 chrome.action.onClicked.addListener(async () => {
@@ -37,13 +43,14 @@ chrome.action.onClicked.addListener(async () => {
       const tab = sortedTabs[0];
       await chrome.tabs.update(tab.id, { active: true });
       await chrome.windows.update(tab.windowId, { focused: true });
-      console.log("[QuackTask/bg] Focused existing Canvas tab:", tab.id, tab.url);
+      if (DEBUG) console.log("[QuackTask/bg] Focused existing Canvas tab:", tab.id, tab.url);
     } else {
       // Otherwise, open a new tab to default Canvas URL
       const newTab = await chrome.tabs.create({ url: defaultCanvasUrl });
-      console.log("[QuackTask/bg] Opened new Canvas tab:", newTab.id);
+      if (DEBUG) console.log("[QuackTask/bg] Opened new Canvas tab:", newTab.id);
     }
   } catch (e) {
+    // Keep error logging - this is critical
     console.error("[QuackTask/bg] Error handling icon click:", e);
   }
 });

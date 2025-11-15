@@ -1,5 +1,6 @@
 // src/content/content.js
 (() => {
+  const DEBUG = false; // Set to true for development logging
   const TAG = "[QuackTask/content]";
   const HOME_OK = (() => {
     try {
@@ -30,12 +31,13 @@
     }
   })();
 
-  const log = (...a) => console.log(TAG, ...a);
+  const info = (...a) => console.log(TAG, ...a); // Basic operational info - always shown
+  const log = (...a) => { if (DEBUG) console.log(TAG, ...a); }; // Verbose debug - only if DEBUG
   const warn = (...a) => console.warn(TAG, ...a);
   const err = (...a) => console.error(TAG, ...a);
 
   if (!HOME_OK) {
-    log("Not on Canvas home, skipping scrape. url=", location.href);
+    if (DEBUG) log("Not on Canvas home, skipping scrape. url=", location.href);
     return;
   }
 
@@ -83,12 +85,13 @@
 
   // ---------- Main scrape ----------
   async function run() {
-    log("Scrape start…");
+    info("Scrape start…");
 
     const courseNameMapping = await extractCourseNameMapping();
     if (
-      Object.keys(courseNameMapping.byId).length ||
-      Object.keys(courseNameMapping.byCode).length
+      DEBUG &&
+      (Object.keys(courseNameMapping.byId).length ||
+      Object.keys(courseNameMapping.byCode).length)
     ) {
       log("Course name mapping extracted:", courseNameMapping);
     }
@@ -96,10 +99,10 @@
     let planner = [];
     try {
       planner = await fetchPlannerAssignmentsWindow(14, 90, {
-        verbose: true,
+        verbose: DEBUG,
         courseNameMapping,
       });
-      log("Planner API items total:", planner.length, planner);
+      if (DEBUG) log("Planner API items total:", planner.length, planner);
     } catch (e) {
       err("Planner API failed:", e);
     }
@@ -107,8 +110,8 @@
     let domFallback = [];
     if (planner.length === 0) {
       try {
-        domFallback = scrapeDomTodo({ verbose: true });
-        log("DOM fallback items:", domFallback.length, domFallback);
+        domFallback = scrapeDomTodo({ verbose: DEBUG });
+        if (DEBUG) log("DOM fallback items:", domFallback.length, domFallback);
       } catch (e) {
         err("DOM fallback failed:", e);
       }
@@ -116,22 +119,22 @@
 
     let grading = [];
     try {
-      grading = await fetchGradingTodos({ verbose: true, courseNameMapping });
-      log("Grading todos items:", grading.length, grading);
+      grading = await fetchGradingTodos({ verbose: DEBUG, courseNameMapping });
+      if (DEBUG) log("Grading todos items:", grading.length, grading);
     } catch (e) {
       err("Grading todos failed:", e);
     }
 
     const baseAssignments = planner.length ? planner : domFallback;
     const data = baseAssignments.concat(grading);
-    log("Final scraped set:", data.length);
+    info("Final scraped set:", data.length);
 
     try {
       const res = await chrome.runtime.sendMessage({
         type: "STORE_SCRAPED_DATA",
         data,
       });
-      log("STORE_SCRAPED_DATA response:", res);
+      if (DEBUG) log("STORE_SCRAPED_DATA response:", res);
     } catch (e) {
       err("STORE_SCRAPED_DATA message failed:", e);
     }
@@ -286,6 +289,7 @@
       document.querySelector("#planner-todosidebar-item-list") ||
       document.querySelector('[data-testid="ToDoSidebar"]');
     if (!root) {
+      // Keep this warning as it indicates a potential issue
       warn("No To-Do DOM root found.");
       return items;
     }
@@ -338,7 +342,8 @@
     try {
       items = await getAllPages(base, { verbose });
     } catch (e) {
-      if (verbose) err("Grading todos API failed:", e);
+      // Keep error logging even if verbose is false - this is a critical failure
+      err("Grading todos API failed:", e);
       return [];
     }
 
