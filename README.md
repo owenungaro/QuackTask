@@ -46,7 +46,7 @@ Hover outlines and shadows have been standardized across all supported modes for
 ## How to Use
 
 1. **Open Canvas**  
-   Go to [https://sit.instructure.com/](https://sit.instructure.com/) (Stevens students only for now).
+   Go to any [.instructure.com] link (for example: [https://sit.instructure.com/](https://sit.instructure.com/)).
 
 2. **Launch QuackTask**  
    The sidebar loads automatically when you open the Canvas dashboard.
