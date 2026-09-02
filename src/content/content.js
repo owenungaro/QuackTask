@@ -17,10 +17,13 @@
       // This helps avoid false positives on non-Canvas pages
       if (document.body) {
         const hasCanvasBody = document.body.classList.contains("ic-app");
+        // Only the classic dashboard has these
         const hasDashboardCards = document.querySelector(".ic-DashboardCard") !== null;
+        // Canvas app shell, present on both the classic and the new dashboard
+        const hasAppShell = document.getElementById("application") !== null;
         // If DOM is loaded, require at least one Canvas marker
         if (document.readyState !== "loading") {
-          return hasCanvasBody || hasDashboardCards;
+          return hasCanvasBody || hasDashboardCards || hasAppShell;
         }
       }
       
@@ -43,6 +46,30 @@
 
   run().catch((e) => err("initial run() failed:", e));
   setTimeout(() => run().catch((e) => err("delayed run() failed:", e)), 1200);
+
+  // ---------- Course names from the API ----------
+  // Works on both dashboards; the new one has no cards to scrape.
+  async function fetchCourseNameMapping() {
+    const byId = Object.create(null);
+    const byCode = Object.create(null);
+    try {
+      const courses = await getAllPages(
+        `${location.origin}/api/v1/courses?enrollment_state=active&per_page=100`,
+        { verbose: DEBUG }
+      );
+      for (const c of courses) {
+        const name = (c?.name || "").trim();
+        if (!name) continue;
+        if (c.id != null) byId[String(c.id)] = name;
+        const code = (c.course_code || "").trim();
+        if (code) byCode[code] = name;
+      }
+      if (DEBUG) log("Courses API mapping:", Object.keys(byId).length, "courses");
+    } catch (e) {
+      err("Courses API failed:", e);
+    }
+    return { byId, byCode };
+  }
 
   // ---------- Extract course name mapping ----------
   async function extractCourseNameMapping({ waitMs = 1000, tries = 5 } = {}) {
@@ -87,13 +114,22 @@
   async function run() {
     info("Scrape start…");
 
-    const courseNameMapping = await extractCourseNameMapping();
+    // Run both in parallel: dashboard cards carry the user's course nicknames,
+    // but only exist on the classic dashboard, so the API backs them up.
+    const [api, cards] = await Promise.all([
+      fetchCourseNameMapping(),
+      extractCourseNameMapping({ waitMs: 400, tries: 3 }),
+    ]);
+    const courseNameMapping = {
+      byId: { ...api.byId, ...cards.byId },
+      byCode: { ...api.byCode, ...cards.byCode },
+    };
     if (
       DEBUG &&
       (Object.keys(courseNameMapping.byId).length ||
       Object.keys(courseNameMapping.byCode).length)
     ) {
-      log("Course name mapping extracted:", courseNameMapping);
+      log("Course name mapping:", courseNameMapping);
     }
 
     let planner = [];
@@ -226,6 +262,19 @@
     return null;
   }
 
+  // Canvas planner item kinds -> QuackTask task types
+  const PLANNABLE_TYPES = {
+    assignment: "assignment",
+    sub_assignment: "assignment",
+    quiz: "quiz",
+    discussion_topic: "discussion",
+    discussion_checkpoint: "discussion",
+    wiki_page: "page",
+    planner_note: "note",
+    calendar_event: "event",
+    assessment_request: "peer_review",
+  };
+
   function mapPlannerToCard(
     item,
     courseNameMapping = { byId: {}, byCode: {} }
@@ -250,8 +299,12 @@
     return {
       course: courseName,
       courseCode,
+      courseId: courseId || null,
       assignment: title,
       href,
+      type:
+        PLANNABLE_TYPES[String(item.plannable_type || "").toLowerCase()] ||
+        "other",
       rfc3339Due: dueISO || null,
       dueText: dueISO ? prettyDate(dueISO) : "No Due Date",
     };
@@ -322,8 +375,14 @@
 
       items.push({
         course,
+        courseId: (href.match(/\/courses\/(\d+)/) || [])[1] || null,
         assignment: title,
         href,
+        type: /\/quizzes\//.test(href)
+          ? "quiz"
+          : /\/discussion_topics\//.test(href)
+          ? "discussion"
+          : "assignment",
         rfc3339Due: null,
         dueText,
       });
@@ -383,9 +442,11 @@
     return {
       course,
       courseCode,
+      courseId: courseId || null,
       assignment: `Grade: ${title}`,
       href,
       rfc3339Due,
+      type: "grading",
       dueText: rfc3339Due ? prettyDate(rfc3339Due) : "Grading needed",
       isGrading: true,
     };

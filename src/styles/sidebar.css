@@ -1,4 +1,18 @@
 /* QuackTask Canvas Sidebar — embedded inside Canvas right sidebar */
+
+/* Hidden until the data is ready and the mount host has stopped moving, so the
+   panel appears once in its final place and final colours rather than flashing
+   through intermediate mounts and theme reads. display:none, not opacity, so it
+   reserves no space while it waits. */
+#quacktask-sidebar[data-qt-loading] {
+  display: none !important;
+}
+
+@keyframes qt-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 #quacktask-sidebar {
   position: static;
   width: 100%;
@@ -39,6 +53,7 @@
   max-height: 72vh;
   overflow: hidden; /* prevent the outer box from stretching the page */
   transition: box-shadow 0.2s ease-out;
+  animation: qt-fade-in 0.18s ease-out;
 }
 
 #quacktask-sidebar:hover {
@@ -66,6 +81,163 @@
   font-weight: 600;
   color: var(--qt-assignment-name, var(--qt-accent, #9d1535));
   letter-spacing: -0.2px;
+}
+
+/* ---------- Type filter (gear menu in the header) ---------- */
+.qt-filter {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.qt-icon-btn {
+  appearance: none;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--qt-subtle, #6b7280);
+  cursor: pointer;
+  transition: all 0.2s ease-out;
+}
+
+.qt-icon-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.qt-icon-btn:hover,
+.qt-icon-btn[aria-expanded="true"] {
+  background: var(--qt-btn-bg, #f5f5f5);
+  border-color: var(--qt-btn-border, #e5e7eb);
+  color: var(--qt-accent, #9d1535);
+}
+
+/* Dot marks the gear while a filter is narrowing the list */
+.qt-icon-btn.qt-active {
+  color: var(--qt-accent, #9d1535);
+}
+
+.qt-icon-btn.qt-active::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--qt-accent, #9d1535);
+  border: 1.5px solid var(--qt-surface, #ffffff);
+}
+
+.qt-filter-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 5;
+  min-width: 214px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--qt-border, #e5e7eb);
+  border-radius: 8px;
+  background: var(--qt-surface, #ffffff);
+  box-shadow: 0 8px 24px var(--qt-shadow, rgba(0, 0, 0, 0.18));
+}
+
+.qt-filter-menu[hidden] {
+  display: none;
+}
+
+.qt-filter-item {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 11px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--qt-text, #111827);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease-out, color 0.15s ease-out;
+}
+
+.qt-box {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  color: var(--qt-subtle, #6b7280);
+}
+
+/* Section labels give each group its own meaning, so the counts in one are
+   never read against the numbers in the other. */
+.qt-menu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 11px 5px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--qt-subtle, #6b7280);
+}
+
+.qt-menu-clear {
+  appearance: none;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--qt-accent, #9d1535);
+  cursor: pointer;
+}
+
+.qt-menu-clear[disabled] {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.qt-filter-item span {
+  flex: 1 1 auto;
+}
+
+.qt-filter-item em {
+  font-style: normal;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums; /* counts line up column-wise */
+  color: var(--qt-subtle, #6b7280);
+}
+
+.qt-filter-item:hover {
+  background: var(--qt-btn-bg-hover, #eeeeee);
+}
+
+.qt-filter-item[aria-checked="true"] {
+  color: var(--qt-accent, #9d1535);
+}
+
+.qt-filter-item[aria-checked="true"] .qt-box,
+.qt-filter-item[aria-checked="true"] em {
+  color: inherit;
 }
 
 /* Scrollable content area */
@@ -161,6 +333,21 @@
   .qtask-title {
     font-size: clamp(10px, 11px, 12px);
   }
+}
+
+/* Task type icon (rows, chips, help legend) */
+.qtask-ico {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  display: inline-block;
+  vertical-align: -2px;
+}
+
+.qtask-title .qtask-ico,
+.qt-help-list .qtask-ico {
+  margin-right: 6px;
+  color: var(--qt-subtle, #6b7280);
 }
 
 .qtask-title a {
@@ -434,7 +621,13 @@
 
 /* Folder selector row */
 .qt-select-row {
+  display: flex; /* avoids the inline-block line box padding the row bottom */
   margin-bottom: 8px; /* puts buttons below the selector */
+}
+
+.qt-select-row .qtask-select {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* Actions row: blacklist + logout */
@@ -637,4 +830,245 @@
 .qt-date-buttons .qtask-btn {
   flex: 1;
   min-width: 80px;
+}
+
+/* ---------- Panel mode: new dashboard, nothing to decorate ---------- */
+/* The Courses tab has no Coursework widget, so we fall back to a standalone
+   card. It should read exactly like the classic right-hand sidebar, which the
+   base styles already give us -- it just needs to stop filling the column. */
+#quacktask-sidebar[data-mode="panel"] {
+  max-width: 340px;
+  margin: 16px 0 16px auto; /* sits on the right, as the classic sidebar does */
+}
+
+/* Wide rows put the buttons beside the text instead of stacking them.
+   .qtask-row is already a size container, so this applies in either mode. */
+@container (min-width: 420px) {
+  .qtask-actions {
+    flex-direction: row;
+    align-items: center;
+  }
+}
+
+/* ---------- Decorate mode: living inside Canvas's Coursework widget ---------- */
+/* No card of our own here -- we sit on the widget's surface, under its heading. */
+#quacktask-sidebar[data-mode="decorate"] {
+  max-height: none;
+  overflow: visible;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+/* Mirror Canvas's own "Course filter:" / "Submission status:" idiom -- a bold
+   label over a full-height control -- so the strip reads as part of the widget
+   rather than as a toolbar bolted above it. */
+/* A shared grid, not two independent columns. The select and the buttons are
+   placed in the same row, so they line up because they ARE the same row --
+   no depending on two differently-built boxes computing equal heights. */
+#quacktask-sidebar[data-mode="decorate"] .qtask-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 320px) max-content;
+  justify-content: space-between;
+  align-items: center;
+  column-gap: 16px;
+  row-gap: 6px;
+  padding: 4px 0 14px;
+  border: none;
+  background: transparent;
+}
+
+/* Let the two wrappers dissolve so their children become grid items */
+#quacktask-sidebar[data-mode="decorate"] .qt-field {
+  display: contents;
+}
+
+#quacktask-sidebar[data-mode="decorate"] .qt-field label {
+  grid-area: 1 / 1;
+}
+
+#quacktask-sidebar[data-mode="decorate"] .qt-strip-actions {
+  grid-area: 2 / 2;
+}
+
+.qt-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 240px;
+  min-width: 0;
+  max-width: 340px;
+}
+
+.qt-field label {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--qt-text, #111827);
+}
+
+#quacktask-sidebar[data-mode="decorate"] .qtask-select {
+  grid-area: 2 / 1;
+  width: 100%;
+  height: 36px;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.qt-strip-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+#quacktask-sidebar[data-mode="decorate"] .qt-strip-actions .qtask-btn {
+  height: 36px;
+  box-sizing: border-box;
+  padding: 0 14px;
+  border-radius: 4px;
+  font-size: 12px;
+  box-shadow: none;
+}
+
+#quacktask-sidebar[data-mode="decorate"] .qt-strip-actions .qtask-btn:hover {
+  transform: none;
+}
+
+/* Buttons injected into Canvas's own coursework rows. The row flex is 476px
+   holding 452px of content, so keep this narrow -- it takes the slack out of
+   the title column rather than overflowing the row. */
+.qt-row-host {
+  display: flex;
+  align-items: center;
+  align-self: center;
+  flex: 0 0 auto;
+  margin-left: 12px;
+}
+
+/* Side by side, not stacked: .qtask-actions defaults to a column for the narrow
+   sidebar, and Canvas's rows are only 80px tall but very wide. */
+.qt-row-host .qtask-actions {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.qt-row-host .qtask-btn {
+  min-width: 0;
+  padding: 4px 8px;
+  font-size: 11px;
+  box-shadow: none;
+}
+
+.qt-row-host .qtask-btn:hover {
+  transform: none;
+}
+
+/* ---------- Cards mode: badges on the Courses tab's course cards ---------- */
+/* The shell exists only to carry theme tokens and storage wiring; the visible
+   output is the badges injected into Canvas's own cards. */
+#quacktask-sidebar[data-mode="cards"] {
+  display: none !important;
+}
+
+/* Sits on the card's coloured banner, which is empty space. A translucent dark
+   scrim rather than a theme colour: course banners are arbitrary colours and
+   some are photographs, and white-on-scrim is the only thing readable on all
+   of them. Inside the card's <a>, hence the text-decoration reset. */
+.qt-card-badge {
+  appearance: none;
+  /* Canvas wraps the card header in a link. Without a stacking context of our
+     own above it, that link takes the pointer and the badge never sees hover
+     or click at all. */
+  position: relative;
+  z-index: 2;
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 8px;
+  padding: 4px 9px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #ffffff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.2s ease-out;
+}
+
+.qt-card-badge .qtask-ico {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  color: inherit;
+}
+
+.qt-card-badge:hover {
+  background: rgba(0, 0, 0, 0.68);
+}
+
+/* ---------- Hover preview of a course's tasks (Courses tab) ---------- */
+/* pointer-events:none is load-bearing: the popover opens right under the badge,
+   so if it could take the pointer it would steal the hover and flicker. */
+#qt-card-pop {
+  position: fixed;
+  z-index: 2147483645;
+  min-width: 220px;
+  max-width: 340px;
+  padding: 6px;
+  border: 1px solid var(--qt-border, #e5e7eb);
+  border-radius: 8px;
+  background: var(--qt-surface, #ffffff);
+  box-shadow: 0 8px 24px var(--qt-shadow, rgba(0, 0, 0, 0.22));
+  color: var(--qt-text, #111827);
+  font-size: 12px;
+  pointer-events: none;
+  animation: qt-fade-in 0.12s ease-out;
+}
+
+#qt-card-pop[hidden] {
+  display: none;
+}
+
+.qt-pop-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 7px;
+  white-space: nowrap;
+}
+
+.qt-pop-row .qtask-ico {
+  flex: 0 0 auto;
+  margin: 0;
+  color: var(--qt-subtle, #6b7280);
+}
+
+.qt-pop-row span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+
+.qt-pop-row em {
+  flex: 0 0 auto;
+  font-style: normal;
+  font-weight: 700;
+  color: var(--qt-subtle, #6b7280);
+}
+
+.qt-pop-more {
+  padding: 6px 7px;
+  color: var(--qt-subtle, #6b7280);
+  font-weight: 700;
 }

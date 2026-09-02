@@ -8,6 +8,8 @@
   const WIDGET_ID = "quacktask-sidebar";
   const BODY_ID = "quacktask-body";
   const SELECT_ID = "qt-folder-select";
+  const FILTER_BTN_ID = "qt-filter-btn";
+  const FILTER_MENU_ID = "qt-filter-menu";
   const BTN_BLACKLIST_ID = "qt-open-blacklist";
   const BTN_AUTH_ID = "qt-auth-toggle";
   const BTN_HELP_ID = "qt-help";
@@ -348,6 +350,31 @@
       ddText = subtle;
     }
 
+    // Panel and decorate modes sit among Canvas's own widgets, so take their
+    // card color.
+    // The new dashboard has its own dark theme independent of BetterCanvas, so
+    // adopting the surface can legitimately flip us light<->dark; when it does,
+    // the inherited text colour has to come with it or it turns invisible.
+    let adoptedDark = null;
+    if (
+      (el.dataset.mode === "panel" || el.dataset.mode === "decorate") &&
+      hostIsThemed()
+    ) {
+      const hostBg = hostSurface();
+      const rgb = parseColorToRgb(hostBg);
+      if (rgb) {
+        surface = hostBg;
+        adoptedDark = luminance(rgb) < 128;
+        const inherited = parseColorToRgb(bc.has ? ddText : subtle);
+        // Only override when the inherited text would be unreadable on it
+        if (!inherited || adoptedDark === luminance(inherited) < 128) {
+          text = adoptedDark ? TEXT_D : TEXT_L;
+          subtle = adoptedDark ? SUB_D : SUB_L;
+          ddText = subtle;
+        }
+      }
+    }
+
     // Ensure we have valid color values
     if (!surface || !text || !accent) {
       // Keep this as a warning since it indicates a real problem
@@ -363,7 +390,12 @@
     el.style.setProperty('--qt-accent', accent);
     el.style.setProperty('--qt-accent-contrast', '#ffffff');
     
-    const darkMode = bc.has ? isDarkByText(text) : detectDarkModeFallback();
+    const darkMode =
+      adoptedDark !== null
+        ? adoptedDark
+        : bc.has
+        ? isDarkByText(text)
+        : detectDarkModeFallback();
     
     // Set assignment name color - ensure MAROON in all fallback modes
     if (!bc.has) {
@@ -418,6 +450,20 @@
     el.style.setProperty('--qt-add-bg', adjustedAddBg);
     el.style.setProperty('--qt-add-bg-hover', darken(accent, 0.08));
     el.style.setProperty('--qt-add-text', '#ffffff');
+
+    // Sitting inside Canvas's own chrome, maroon-on-teal reads as a foreign
+    // object. adoptedDark is non-null only when we adopted the host's surface.
+    if (adoptedDark !== null) {
+      const step = darkMode ? lighten : darken;
+      const add = hostAccent() || step(surface, 0.22);
+      const addRgb = parseColorToRgb(add);
+      el.style.setProperty('--qt-add-bg', add);
+      el.style.setProperty('--qt-add-bg-hover', step(add, 0.12));
+      // Canvas puts dark text on its own mid-tone pills; match that
+      el.style.setProperty('--qt-add-text', addRgb && luminance(addRgb) > 128 ? TEXT_L : TEXT_D);
+      el.style.setProperty('--qt-accent', add);
+      el.style.setProperty('--qt-assignment-name', text);
+    }
 
     el.style.setProperty('--qt-dd-bg', bc.has ? ddBg : surface);
     el.style.setProperty('--qt-dd-text', bc.has ? ddText : subtle);
@@ -513,8 +559,13 @@
     // Force background update - CSS uses var(--qt-surface) which should pick this up
     // But we'll also set it directly as a backup
     requestAnimationFrame(() => {
-      el.style.background = surface;
-      el.style.backgroundColor = surface;
+      // Decorate mode sits directly on Canvas's card; painting a background
+      // here would draw a panel we deliberately do not want.
+      if (el.dataset.mode !== "decorate" && el.dataset.mode !== "cards") {
+        el.style.background = surface;
+        el.style.backgroundColor = surface;
+      }
+      propagateTokens(el);
     });
     
     if (DEBUG) LOG("applyTokens: Applied tokens, surface:", surface, "text:", text, "accent:", accent, "darkMode:", darkMode, "bc.has:", bc.has);
@@ -539,10 +590,13 @@
       // Additional safety: check for Canvas DOM markers if available
       if (document.body) {
         const hasCanvasBody = document.body.classList.contains("ic-app");
+        // Only the classic dashboard has these
         const hasDashboardCards = document.querySelector(".ic-DashboardCard") !== null;
+        // Canvas app shell, present on both the classic and the new dashboard
+        const hasAppShell = document.getElementById("application") !== null;
         // If DOM is loaded, require at least one Canvas marker
         if (document.readyState !== "loading") {
-          return hasCanvasBody || hasDashboardCards;
+          return hasCanvasBody || hasDashboardCards || hasAppShell;
         }
       }
       
@@ -552,7 +606,185 @@
       return false;
     }
   };
-  const rightAside = () => document.getElementById("right-side");
+  /* ---------------------- mount host ---------------------- */
+  // Classic Canvas puts us in the right sidebar. The new customizable dashboard
+  // has no #right-side, so we sit inline next to its Coursework widget instead.
+  let HOST = null;
+
+  // Confirmed against the new dashboard. Prefix matches so the "-combined-"
+  // naming (and any future variant of it) keeps working.
+  const NEW_DASH_SEL = '[data-testid="widget-columns"]';
+  const WORK_BOX_SEL = '[data-testid^="widget-container-course-work"]';
+  const WORK_CARD_SEL = '[data-testid^="widget-course-work"]';
+  const COURSEWORK_TESTID = /^(course-?work|assignments?-widget)/i;
+
+  const isCardish = (el) => {
+    const st = getComputedStyle(el);
+    return parseFloat(st.borderRadius) >= 4 || st.boxShadow !== "none";
+  };
+
+  // Climb from a marker to the widget's own card: the outermost rounded or
+  // shadowed box between the marker and the page content wrapper. Landing on a
+  // layout container instead just puts us lower down the page, which is fine;
+  // landing inside the widget would not be, so we never stop short of a card.
+  function widgetCardOf(el) {
+    const cap = document.getElementById("content") || document.body;
+    let node = el;
+    // Seed with el itself: the data-testid path already starts on the card
+    let card = isCardish(el) ? el : null;
+    for (let i = 0; i < 8; i++) {
+      const parent = node.parentElement;
+      if (!parent || parent === cap || parent === document.body) break;
+      node = parent;
+      if (isCardish(node)) card = node;
+    }
+    return card || node;
+  }
+
+  function courseWorkWidget() {
+    for (const el of document.querySelectorAll("[data-testid]")) {
+      if (COURSEWORK_TESTID.test(el.getAttribute("data-testid") || "")) {
+        return widgetCardOf(el);
+      }
+    }
+    const head = Array.from(
+      document.querySelectorAll("h1,h2,h3,h4,[role='heading']")
+    ).find((h) => /^course\s*work$/i.test((h.textContent || "").trim()));
+    return head ? widgetCardOf(head) : null;
+  }
+
+  // { el, sample, mode, place } — el is the anchor, sample is what we read the
+  // background off, place() does the insertion.
+  function resolveHost() {
+    // Check this FIRST: the new dashboard still ships an unused #right-side,
+    // so its presence no longer means we are on the classic dashboard.
+    const grid = document.querySelector(NEW_DASH_SEL);
+    if (grid) {
+      // Preferred: live inside the Coursework widget, decorating its own rows.
+      // Our controls strip goes directly under the widget heading.
+      const card = document.querySelector(WORK_CARD_SEL);
+      const heading = card && card.querySelector('h2[id$="-heading"]');
+      const headRow = heading && heading.parentElement && heading.parentElement.parentElement;
+      if (headRow && headRow.parentElement) {
+        return {
+          el: headRow,
+          sample: card,
+          mode: "decorate",
+          place: (w) => headRow.after(w),
+        };
+      }
+
+      // After the container, not the card: that makes us a sibling of the
+      // other widget boxes instead of a child of React's widget subtree.
+      const box = document.querySelector(WORK_BOX_SEL);
+      if (box && box.parentElement) {
+        return {
+          el: box,
+          sample: box.querySelector(WORK_CARD_SEL) || box,
+          mode: "panel",
+          place: (w) => box.after(w),
+        };
+      }
+      // Coursework widget removed, or renamed out from under us
+      const work = courseWorkWidget();
+      if (work && work.parentElement) {
+        return { el: work, sample: work, mode: "panel", place: (w) => work.after(w) };
+      }
+      const col = grid.querySelector('[data-testid^="widget-column-"]') || grid;
+      return {
+        el: col,
+        // Any neighbouring widget card will do for the surface colour
+        sample:
+          col.querySelector(WORK_CARD_SEL) ||
+          col.querySelector('section[data-testid^="widget-"]') ||
+          col,
+        mode: "panel",
+        place: (w) => col.appendChild(w),
+      };
+    }
+
+    // The new dashboard also renders #right-side, collapsed to zero width. It
+    // may be the only thing present at document_idle, before React has drawn
+    // the widgets, so size is what tells the real sidebar from the leftover.
+    // New dashboard, but the widget grid is absent: we are on the Courses tab,
+    // which is a card grid with nothing to attach a task list to. Badge the
+    // cards instead. body is the token carrier since the shell stays hidden.
+    if (document.querySelector('[data-testid="dashboard-tabs"]')) {
+      const content = document.getElementById("content") || document.body;
+      return {
+        el: content,
+        sample: document.body,
+        mode: "cards",
+        place: (w) => content.appendChild(w),
+      };
+    }
+
+    const aside = document.getElementById("right-side");
+    if (aside && aside.getBoundingClientRect().width > 0) {
+      return { el: aside, sample: aside, mode: "aside", place: (w) => aside.prepend(w) };
+    }
+
+    const content = document.getElementById("content");
+    if (content) {
+      return { el: content, sample: content, mode: "panel", place: (w) => content.appendChild(w) };
+    }
+    return null;
+  }
+
+  // Nearest opaque background behind the panel, so inline mode matches the
+  // Canvas widgets it sits between instead of guessing white.
+  // Tokens the injected row buttons need. They live in Canvas's DOM, outside
+  // our element, so they cannot inherit anything we set on it.
+  const DECORATE_TOKENS = [
+    "--qt-surface", "--qt-border", "--qt-text", "--qt-subtle", "--qt-accent",
+    "--qt-row-hover", "--qt-shadow", "--qt-btn-bg", "--qt-btn-bg-hover",
+    "--qt-btn-text", "--qt-btn-border", "--qt-add-bg", "--qt-add-bg-hover",
+    "--qt-add-text", "--qt-assignment-name",
+  ];
+
+  function propagateTokens(from) {
+    const decorates = HOST && (HOST.mode === "decorate" || HOST.mode === "cards");
+    const card = decorates && HOST.sample;
+    if (!card || !from) return;
+    const cs = getComputedStyle(from);
+    DECORATE_TOKENS.forEach((t) => {
+      const v = cs.getPropertyValue(t);
+      if (v) card.style.setProperty(t, v);
+    });
+  }
+
+  const opaque = (bg) => {
+    const m = /^rgba?\(([^)]+)\)/.exec(bg || "");
+    if (!m) return null;
+    const parts = m[1].split(",").map((v) => parseFloat(v));
+    return parts.length < 4 || parts[3] > 0.1 ? bg : null;
+  };
+
+  // Canvas's due-date pills carry the dashboard's own accent. Borrowing it beats
+  // painting QuackTask maroon buttons onto a teal widget.
+  function hostAccent() {
+    const card = HOST && HOST.sample;
+    const pill = card && card.querySelector('[data-testid*="status-pill"]');
+    return pill ? opaque(getComputedStyle(pill).backgroundColor) : null;
+  }
+
+  // Borrow Canvas's palette only when Canvas has one worth matching. On a
+  // default, unthemed dashboard the card is near-white and its controls are
+  // grey, so sampling it would strip QuackTask of its own identity.
+  function hostIsThemed() {
+    if (detectBetterCanvas().has) return true;
+    const rgb = parseColorToRgb(hostSurface());
+    return !!(rgb && luminance(rgb) < 235);
+  }
+
+  function hostSurface() {
+    let node = HOST && (HOST.sample || HOST.el);
+    for (let i = 0; i < 5 && node; i++, node = node.parentElement) {
+      const bg = opaque(getComputedStyle(node).backgroundColor);
+      if (bg) return bg;
+    }
+    return null;
+  }
 
   const sendBg = (payload) =>
     new Promise((resolve) => {
@@ -579,19 +811,192 @@
   const taskKey = (t) =>
     `${t.course || t.courseCode || ""} → ${t.assignment || ""}`;
 
+  /* ---------------------- task types ---------------------- */
+  // icon = inner markup of a 16x16 stroke icon; it inherits the surrounding color
+  const TYPE_META = {
+    assignment: {
+      label: "Assignments",
+      icon: `<path d="M2.5 4.5 4 6l2.5-2.5"/><path d="M9 5h4.5"/><path d="M2.5 11 4 12.5 6.5 10"/><path d="M9 11.5h4.5"/>`,
+    },
+    quiz: {
+      label: "Quizzes",
+      icon: `<circle cx="8" cy="8" r="6"/><path d="M6.3 6.3a1.75 1.75 0 1 1 1.9 2v1.1"/><path d="M8.2 12h.01"/>`,
+    },
+    discussion: {
+      label: "Discussions",
+      icon: `<path d="M14 9.5a2 2 0 0 1-2 2H6.5L3.5 14V4a2 2 0 0 1 2-2H12a2 2 0 0 1 2 2z"/>`,
+    },
+    page: {
+      label: "Pages",
+      icon: `<path d="M4 2h5.5L12.5 5v9H4z"/><path d="M9.5 2v3h3"/><path d="M6.5 9h3.5"/>`,
+    },
+    note: {
+      label: "To-Do Notes",
+      icon: `<path d="M4 2.5h8v11l-4-3-4 3z"/>`,
+    },
+    event: {
+      label: "Events",
+      icon: `<rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3"/>`,
+    },
+    peer_review: {
+      label: "Peer Reviews",
+      icon: `<circle cx="6" cy="6" r="2.5"/><circle cx="11.75" cy="6.75" r="1.75"/><path d="M1.5 13.5c0-2.4 2-4 4.5-4 1.4 0 2.6.5 3.4 1.3"/><path d="M9.75 13.5c0-1.9.9-3 2.25-3s2.5 1.1 2.5 3"/>`,
+    },
+    grading: {
+      label: "To Grade",
+      icon: `<path d="M8 2.5 15 6l-7 3.5L1 6z"/><path d="M4 7.6V11c0 1.1 1.8 2 4 2s4-.9 4-2V7.6"/>`,
+    },
+    other: {
+      label: "Other",
+      icon: `<path d="M3 4.5h10M3 8h10M3 11.5h7"/>`,
+    },
+  };
+
+  const GEAR_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`;
+
+  // Ticked checkbox: distinct from Canvas's own assignment/discussion icons
+  const MARK_ICON = `<svg class="qtask-ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.25" y="2.25" width="11.5" height="11.5" rx="3"/><path d="M5.4 8.2 7.2 10l3.4-3.7"/></svg>`;
+
+  // Real checkboxes: this menu is a multi-select, and a highlight alone does
+  // not say so. Leading position is where people look for checked state.
+  const BOX_EMPTY = `<svg class="qt-box" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="3"/></svg>`;
+  const BOX_CHECKED = `<svg class="qt-box" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="3"/><path d="M5.4 8.2 7.1 9.9 10.7 6.2"/></svg>`;
+
+
+  const typeIcon = (type) =>
+    `<svg class="qtask-ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><title>${escapeHtml(
+      TYPE_META[type].label
+    )}</title>${TYPE_META[type].icon}</svg>`;
+
+  // Stored as an array of types; empty means no filter. Older builds stored a string.
+  const normalizeFilter = (v) =>
+    Array.isArray(v) ? v : typeof v === "string" && v !== "all" ? [v] : [];
+
+  // Falls back for cached items scraped before types existed
+  const typeOf = (t) => {
+    const type =
+      t.type ||
+      (t.isGrading || (t.assignment || "").startsWith("Grade: ")
+        ? "grading"
+        : "assignment");
+    return TYPE_META[type] ? type : "other";
+  };
+
   const greyRowButtons = (row, on) =>
     row.querySelectorAll(".qtask-btn").forEach((b) => (b.disabled = on));
 
   /* ---------------------- mount / shell ---------------------- */
-  function mountShell(parent) {
+  /* ---------------------- first-paint gate ---------------------- */
+  // Mounting can happen two or three times on the way in: document_idle finds
+  // only the #content fallback, then React draws the widgets and we move. And
+  // applyTokens re-reads the theme on a schedule as Canvas/BetterCanvas CSS
+  // lands, so an early read can differ from the final one. Stay hidden until
+  // the data is ready AND the host has held still, then paint once.
+  const SETTLE_MS = 300;
+  const MAX_WAIT_MS = 2500; // never wait forever on a widget that keeps polling
+  let lastMountAt = 0;
+  let lastChurnAt = 0;
+  let injecting = false;
+  let painted = false; // has anything of ours actually been made visible yet
+  let pendingSettle = [];
+  let settleTimer = null;
+
+  // Our own DOM writes must not count as churn or we would reset the clock on
+  // ourselves forever. Mutation records are delivered as microtasks, which run
+  // before a 0ms timeout, so the flag is still set when the observer sees them.
+  function markInjecting() {
+    injecting = true;
+    setTimeout(() => {
+      injecting = false;
+    }, 0);
+  }
+
+  // Where Canvas's own rendering counts: the Coursework card in decorate mode,
+  // the content column in cards mode. Anything wider and an unrelated widget
+  // still loading would hold us back.
+  const churnScope = () => {
+    if (!HOST) return null;
+    const s = HOST.sample;
+    return s && s !== document.body ? s : HOST.el || null;
+  };
+
+  // Quiet for SETTLE_MS since the last of (our remount, Canvas redrawing the
+  // host), or MAX_WAIT_MS since mounting, whichever comes first.
+  const settled = () => {
+    const now = performance.now();
+    return (
+      now - Math.max(lastMountAt, lastChurnAt) >= SETTLE_MS ||
+      now - lastMountAt >= MAX_WAIT_MS
+    );
+  };
+
+  // Queues fn until the host has held still. A queue rather than one timer per
+  // caller: several callers wait at once, and a shared timer handle would let
+  // the last one cancel the others. After the opening moments settled() is
+  // already true, so page turns and filter changes stay instant.
+  function whenSettled(fn) {
+    if (settled()) return fn();
+    if (!pendingSettle.includes(fn)) pendingSettle.push(fn);
+    if (settleTimer) return;
+    const quietIn = SETTLE_MS - (performance.now() - Math.max(lastMountAt, lastChurnAt));
+    const capIn = MAX_WAIT_MS - (performance.now() - lastMountAt);
+    settleTimer = setTimeout(flushSettle, Math.max(0, Math.min(quietIn, capIn)));
+  }
+
+  // A remount mid-wait resets lastMountAt, so re-queue rather than run
+  function flushSettle() {
+    settleTimer = null;
+    const queued = pendingSettle;
+    pendingSettle = [];
+    queued.forEach((fn) => whenSettled(fn));
+  }
+
+  function paintWidget() {
+    const el = document.getElementById(WIDGET_ID);
+    if (!el || !el.hasAttribute("data-qt-loading")) return;
+    applyTokens(el); // settle the colours while it is still invisible
+    requestAnimationFrame(() => {
+      el.removeAttribute("data-qt-loading");
+      painted = true;
+    });
+  }
+
+  function revealWidget() {
+    const el = document.getElementById(WIDGET_ID);
+    if (!el || !el.hasAttribute("data-qt-loading")) return;
+    whenSettled(paintWidget);
+  }
+
+  // decorate and cards paint into Canvas's markup, outside our element, so the
+  // display:none gate cannot cover them. They wait on the same settle instead,
+  // and take the theme tokens before injecting so nothing appears mis-coloured.
+  function paintReady() {
+    if (!settled()) return false;
+    propagateTokens(document.getElementById(WIDGET_ID));
+    return true;
+  }
+
+  function mountShell(host) {
     const old = document.getElementById(WIDGET_ID);
     if (old && old.parentElement) old.parentElement.removeChild(old);
 
+    HOST = host;
+    markInjecting();
+
     const wrap = document.createElement("div");
     wrap.id = WIDGET_ID;
-    wrap.innerHTML = `
+    wrap.dataset.mode = host.mode;
+    wrap.setAttribute("data-qt-loading", "");
+    lastMountAt = performance.now();
+    wrap.innerHTML =
+      host.mode === "cards" ? "" :
+      host.mode === "decorate" ? decorateShellHTML() : `
       <header>
         <h3>QuackTask</h3>
+        <div class="qt-filter" data-gated="ready" style="display:none">
+          <button id="${FILTER_BTN_ID}" type="button" class="qt-icon-btn" aria-haspopup="true" aria-expanded="false" title="Filter by task type">${GEAR_ICON}</button>
+          <div id="${FILTER_MENU_ID}" class="qt-filter-menu" role="menu" hidden></div>
+        </div>
       </header>
 
       <!-- Controls are hidden in the BASE state; they appear when ready -->
@@ -612,12 +1017,13 @@
       </div>
     `;
 
-    parent.prepend(wrap);
-    INFO("sidebar boot @", location.href);
+    host.place(wrap);
+    INFO(`sidebar boot (${host.mode}) @`, location.href);
 
-    // Make the body scrollable so the page doesn't grow forever
+    // Every mode that renders its own list needs it capped and scrolling;
+    // decorate mode has no list of its own.
     const body = document.getElementById(BODY_ID);
-    if (body) {
+    if (body && host.mode !== "decorate" && host.mode !== "cards") {
       body.style.maxHeight = "60vh";
       body.style.overflow = "auto";
     }
@@ -654,10 +1060,11 @@
     }
   }
 
-  // Show/hide the entire controls block (dropdown + buttons) when ready
+  // Show/hide everything gated on ready (header gear + controls block) when ready
   function setReadyUI(ready) {
-    const controls = document.querySelector('[data-gated="ready"]');
-    if (controls) controls.style.display = ready ? "" : "none";
+    document.querySelectorAll('[data-gated="ready"]').forEach((el) => {
+      el.style.display = ready ? "" : "none";
+    });
   }
 
   async function wireControls() {
@@ -693,6 +1100,58 @@
     const helpBtn = document.getElementById(BTN_HELP_ID);
     if (helpBtn) {
       helpBtn.onclick = () => openHelpOverlay();
+    }
+
+    const gear = document.getElementById(FILTER_BTN_ID);
+    const menu = document.getElementById(FILTER_MENU_ID);
+    if (gear && menu) {
+      gear.onclick = () => {
+        menu.hidden = !menu.hidden;
+        gear.setAttribute("aria-expanded", String(!menu.hidden));
+      };
+      // Stays open so several types can be picked in one go
+      menu.onclick = (e) => {
+        if (e.target.closest(".qt-menu-clear")) {
+          chrome.storage.local.set({ qt_type_filter: [] });
+          renderFromStorage();
+          return;
+        }
+
+        const item = e.target.closest(".qt-filter-item");
+        if (!item) return;
+
+        if (item.dataset.toggle === "added") {
+          chrome.storage.local.get({ qt_hide_added: false }, (st) => {
+            chrome.storage.local.set({ qt_hide_added: !st.qt_hide_added });
+            renderFromStorage();
+          });
+          return;
+        }
+
+        const type = item.dataset.type;
+        chrome.storage.local.get({ qt_type_filter: [] }, (st) => {
+          const cur = normalizeFilter(st.qt_type_filter);
+          const next =
+            type === "all"
+              ? [] // "All types" clears the rest rather than joining them
+              : cur.includes(type)
+              ? cur.filter((k) => k !== type)
+              : cur.concat(type);
+          chrome.storage.local.set({ qt_type_filter: next });
+          renderFromStorage();
+        });
+      };
+    }
+
+    // Document-level handlers survive re-mounts, so only attach them once
+    if (!filterMenuWired) {
+      filterMenuWired = true;
+      document.addEventListener("click", (e) => {
+        if (!e.target.closest || !e.target.closest(".qt-filter")) closeFilterMenu();
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closeFilterMenu();
+      });
     }
 
     const sel = document.getElementById(SELECT_ID);
@@ -773,24 +1232,330 @@
     }
   }
 
+  /* ---------------------- coursework widget decoration ---------------------- */
+  const ROW_SEL = '[data-testid^="listed-course-work-item-"]';
+  const COURSE_LINK_SEL = '[data-testid^="course-work-item-course-link-"]';
+
+  let LAST_TASKS = [];
+  let LAST_BLACKLIST = new Set();
+
+  const norm = (v) => (v || "").replace(/\s+/g, " ").trim().toLowerCase();
+
+  function decorateShellHTML() {
+    return `
+      <div class="qtask-controls" data-gated="ready" style="display:none">
+        <div class="qt-field">
+          <label for="${SELECT_ID}">Google Tasks list:</label>
+          <select id="${SELECT_ID}" class="qtask-select" aria-label="Google Task list"></select>
+        </div>
+        <div class="qt-field qt-field--actions">
+          <div class="qt-strip-actions">
+            <button id="${BTN_BLACKLIST_ID}" type="button" class="qtask-btn qtask-del">Blacklist</button>
+            <button id="${BTN_AUTH_ID}" type="button" class="qtask-btn qtask-del" data-mode="login">Login</button>
+            <button id="${BTN_HELP_ID}" type="button" class="qtask-btn qtask-del">Help</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Canvas lists a row by its full title plus its course code, which is the
+  // same pair codeKeyOf builds from. Match on those rather than on the row id:
+  // graded discussions are listed under an /assignments/ URL, so matching by
+  // id or href misses them without ever looking wrong.
+  function matchTask(row, tasks) {
+    const title = norm(row.getAttribute("aria-label"));
+    if (!title) return null;
+
+    const hits = tasks.filter((t) => norm(t.assignment) === title);
+    if (hits.length < 2) return hits[0] || null;
+
+    // Same title in two courses: separate them on the course label
+    const link = row.querySelector(COURSE_LINK_SEL);
+    const code = norm(
+      (link && link.getAttribute("aria-label") || "").replace(/^\S+\s+to\s+/i, "")
+    );
+    return (
+      hits.find((t) => norm(t.courseCode) === code || norm(t.course) === code) ||
+      hits[0]
+    );
+  }
+
+  const BRAND_HEADING = "QuackTask Course Work";
+
+  // React rewrites the heading on re-render, so re-assert it every pass. Colour
+  // comes from --qt-assignment-name: maroon when unthemed, the card's own text
+  // colour when we have adopted a Canvas theme.
+  function brandWidget() {
+    const card = HOST && HOST.sample;
+    const h = card && card.querySelector('h2[id$="-heading"]');
+    if (!h) return;
+    if (h.textContent !== BRAND_HEADING) h.textContent = BRAND_HEADING;
+    h.style.color = "var(--qt-assignment-name, var(--qt-accent, #9d1535))";
+  }
+
+  const rowActionsHTML = (inTasks) =>
+    inTasks
+      ? `<div class="qtask-actions"><button class="qtask-btn qtask-del" data-act="del">Remove</button></div>`
+      : `<div class="qtask-actions"><button class="qtask-btn qtask-add" data-act="add">Add</button>` +
+        `<button class="qtask-btn qtask-hide" data-act="hide">Hide</button></div>`;
+
+  // Idempotent: safe to re-run on every Canvas re-render, filter and page turn
+  function decorateCoursework() {
+    if (!paintReady()) return whenSettled(decorateCoursework);
+    markInjecting();
+    brandWidget();
+    document.querySelectorAll(ROW_SEL).forEach((row) => {
+      const task = matchTask(row, LAST_TASKS);
+      const li = row.closest("li") || row;
+
+      if (!task) {
+        li.style.removeProperty("display"); // not ours; leave Canvas alone
+        return;
+      }
+
+      const key = taskKey(task);
+      if (LAST_BLACKLIST.has(key)) {
+        li.style.display = "none";
+        return;
+      }
+      li.style.removeProperty("display");
+
+      const state = task._in_google_tasks ? "in" : "out";
+      let host = row.querySelector(".qt-row-host");
+      if (host && host.dataset.key === key && host.dataset.state === state) return;
+
+      if (!host) {
+        // direction="row" is InstUI's own attribute, steadier than its hashed
+        // class names; the outer row flex is the first one in the row.
+        const flex = row.querySelector('[direction="row"]') || row.firstElementChild;
+        if (!flex) return;
+        host = document.createElement("span");
+        host.className = "qt-row-host";
+        flex.appendChild(host);
+      }
+
+      host.dataset.key = key;
+      host.dataset.href = task.href || "";
+      host.dataset.grading = "false";
+      host.dataset.state = state;
+      host.innerHTML = rowActionsHTML(state === "in");
+
+      const add = host.querySelector("[data-act='add']");
+      const del = host.querySelector("[data-act='del']");
+      const hide = host.querySelector("[data-act='hide']");
+      if (add) add.addEventListener("click", onAddClick);
+      if (del) del.addEventListener("click", onDeleteClick);
+      if (hide) hide.addEventListener("click", onHideClick);
+    });
+
+    painted = true;
+  }
+
+  /* ---------------------- course card badges ---------------------- */
+  // The Courses tab renders classic-looking dashboard cards; fall through a
+  // couple of alternatives in case that markup is not what it appears to be.
+  const CARD_SELS = [
+    ".ic-DashboardCard",
+    '[data-testid^="course-card"]',
+    '[data-testid^="dashboard-card"]',
+  ];
+
+  const courseIdOf = (t) =>
+    t.courseId || ((t.href || "").match(/\/courses\/(\d+)/) || [])[1] || null;
+
+  function courseCards() {
+    for (const sel of CARD_SELS) {
+      const found = document.querySelectorAll(sel);
+      if (found.length) return Array.from(found);
+    }
+    return [];
+  }
+
+  /* ---- hover preview of a course's tasks ---- */
+  const POP_ID = "qt-card-pop";
+  let popWired = false;
+
+  // Lives on <body>, not inside the card: cards clip their overflow, and body
+  // is also where propagateTokens puts the theme in cards mode.
+  function cardPopover() {
+    let el = document.getElementById(POP_ID);
+    if (!el) {
+      el = document.createElement("div");
+      el.id = POP_ID;
+      el.hidden = true;
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+
+  // Delegated, not per-badge: mouseenter does not bubble, so a badge that was
+  // created before wiring (or re-created by a later pass) would have no
+  // listener at all. mouseover/mouseout do bubble, so one pair covers every
+  // badge on the page, now and later.
+  function wireBadgeHover() {
+    if (popWired) return;
+    popWired = true;
+
+    const badgeOf = (e) =>
+      e.target && e.target.closest ? e.target.closest(".qt-card-badge") : null;
+
+    document.addEventListener("mouseover", (e) => {
+      const b = badgeOf(e);
+      if (b) showCardTasks(b);
+    });
+    document.addEventListener("mouseout", (e) => {
+      if (badgeOf(e)) hideCardTasks();
+    });
+    document.addEventListener("focusin", (e) => {
+      const b = badgeOf(e);
+      if (b) showCardTasks(b);
+    });
+    document.addEventListener("focusout", hideCardTasks);
+    window.addEventListener("scroll", hideCardTasks, true);
+  }
+
+  function hideCardTasks() {
+    const el = document.getElementById(POP_ID);
+    if (el) el.hidden = true;
+  }
+
+  function showCardTasks(badge) {
+    const id = badge.dataset.courseId;
+    const list = LAST_TASKS.filter(
+      (t) =>
+        courseIdOf(t) === id &&
+        !t._completed_in_google &&
+        !LAST_BLACKLIST.has(taskKey(t))
+    );
+    if (!list.length) return hideCardTasks();
+
+    const pop = cardPopover();
+    const shown = list.slice(0, 8);
+    pop.innerHTML =
+      shown
+        .map(
+          (t) =>
+            `<div class="qt-pop-row">${typeIcon(typeOf(t))}<span>${escapeHtml(
+              t.assignment || "Untitled"
+            )}</span><em>${escapeHtml(t.dueText || "")}</em></div>`
+        )
+        .join("") +
+      (list.length > shown.length
+        ? `<div class="qt-pop-more">+${list.length - shown.length} more</div>`
+        : "");
+
+    // Measure at a known origin, then place; fixed with auto offsets would
+    // otherwise report its static position and could add a scrollbar.
+    pop.hidden = false;
+    pop.style.left = "0px";
+    pop.style.top = "0px";
+    const r = badge.getBoundingClientRect();
+    const pr = pop.getBoundingClientRect();
+    const gap = 8;
+
+    let top = r.bottom + gap;
+    if (top + pr.height > window.innerHeight - 8) {
+      top = Math.max(8, r.top - gap - pr.height); // flip above
+    }
+    let left = r.left;
+    if (left + pr.width > window.innerWidth - 8) {
+      left = Math.max(8, window.innerWidth - 8 - pr.width);
+    }
+    pop.style.top = `${top}px`;
+    pop.style.left = `${left}px`;
+  }
+
+  function onBadgeClick(e) {
+    e.preventDefault();
+    e.stopPropagation(); // the whole card is a link to the course
+    const tab = document.querySelector('[data-testid="tab-dashboard"]');
+    if (tab) tab.click();
+  }
+
+  function decorateCourseCards() {
+    if (!paintReady()) return whenSettled(decorateCourseCards);
+    markInjecting();
+    wireBadgeHover();
+    const cards = courseCards();
+    if (!cards.length) return;
+
+    const counts = {};
+    LAST_TASKS.forEach((t) => {
+      if (t._completed_in_google || LAST_BLACKLIST.has(taskKey(t))) return;
+      const id = courseIdOf(t);
+      if (id) counts[id] = (counts[id] || 0) + 1;
+    });
+
+    cards.forEach((card) => {
+      const link = card.querySelector('a[href*="/courses/"]');
+      const id =
+        link && ((link.getAttribute("href") || "").match(/\/courses\/(\d+)/) || [])[1];
+      const n = (id && counts[id]) || 0;
+      let badge = card.querySelector(".qt-card-badge");
+
+      if (!n) {
+        if (badge) badge.remove(); // course cleared out since the last pass
+        return;
+      }
+
+      if (!badge) {
+        badge = document.createElement("button");
+        badge.type = "button";
+        badge.className = "qt-card-badge";
+        badge.addEventListener("click", onBadgeClick);
+        // The coloured banner is empty space with nothing to collide with or
+        // clip against, unlike the action row along the bottom.
+        const slot =
+          card.querySelector(".ic-DashboardCard__header_hero") ||
+          card.querySelector(".ic-DashboardCard__header") ||
+          card;
+        slot.appendChild(badge);
+      }
+
+      badge.dataset.courseId = id;
+      if (badge.dataset.count === String(n)) return;
+      badge.dataset.count = String(n);
+      // No title attribute: the native tooltip would race our own popover
+      badge.setAttribute(
+        "aria-label",
+        `${n} ${n === 1 ? "task" : "tasks"} in QuackTask`
+      );
+      badge.innerHTML = `${MARK_ICON}<span>${n}</span>`;
+    });
+
+    painted = true;
+  }
+
   /* ---------------------- render tasks ---------------------- */
   function renderFromStorage() {
     const body = document.getElementById(BODY_ID);
-    if (!body) return;
+    // decorate and cards render into Canvas's own markup, so they have no body
+    const mode = HOST ? HOST.mode : "aside";
+    const decorating = mode === "decorate";
+    if (!body && decorating === false && mode !== "cards") return;
 
     chrome.storage.local.get(
-      ["qt_tasks", "scrapedData", "qt_blacklist", "qt_ready"],
+      [
+        "qt_tasks", "scrapedData", "qt_blacklist", "qt_ready",
+        "qt_type_filter", "qt_hide_added",
+      ],
       (st) => {
         // We only show content after:
         // 1) background says the data is accurate (qt_ready === true), AND
         // 2) the first sync has returned on THIS page load (PAGE_GATE_OPEN)
         const ready = st.qt_ready === true && PAGE_GATE_OPEN;
 
+        // content.js scrapes twice on load, and each scrape flips qt_ready
+        // false->true. Once we are up, ride out those dips on the last good
+        // render rather than blanking and re-showing.
+        if (!ready && painted) return;
+
         // Toggle controls visibility with the same gate
         setReadyUI(ready);
 
         if (!ready) {
-          body.innerHTML = `<div class="qtask-empty">Loading tasks…</div>`;
+          if (body) body.innerHTML = `<div class="qtask-empty">Loading tasks…</div>`;
           return;
         }
 
@@ -802,16 +1567,14 @@
 
         const blacklist = new Set(st.qt_blacklist || []);
         if (DEBUG) LOG("render tasks count:", tasks.length, "blacklist:", blacklist.size);
-        // Show basic info about what's being rendered
-        if (tasks.length > 0) {
-          const visible = tasks.filter((t) => !blacklist.has(taskKey(t)) && !t._completed_in_google);
-          if (visible.length !== tasks.length || DEBUG) {
-            INFO(`Rendering ${visible.length} of ${tasks.length} tasks`);
-          }
-        }
 
-        if (!tasks.length) {
-          body.innerHTML = `<div class="qtask-empty">Nothing to show.</div>`;
+        // These modes write into Canvas's own markup rather than a list of ours
+        if (decorating || mode === "cards") {
+          LAST_TASKS = tasks;
+          LAST_BLACKLIST = blacklist;
+          if (decorating) decorateCoursework();
+          else decorateCourseCards();
+          revealWidget();
           return;
         }
 
@@ -819,8 +1582,27 @@
         const visible = tasks.filter((t) => {
           return !blacklist.has(taskKey(t)) && !t._completed_in_google;
         });
+
+        // Show basic info about what's being rendered
+        if (tasks.length > 0 && (visible.length !== tasks.length || DEBUG)) {
+          INFO(`Rendering ${visible.length} of ${tasks.length} tasks`);
+        }
+
+        // Drop the already-added first, so the type counts match what is shown
+        const hideAdded = st.qt_hide_added === true;
+        const addedCount = visible.filter((t) => t._in_google_tasks).length;
+        const pool = hideAdded
+          ? visible.filter((t) => !t._in_google_tasks)
+          : visible;
+
+        // Then narrow to the selected task types
+        const types = fillTypeFilter(pool, st.qt_type_filter, hideAdded, addedCount);
+        const shown = types.length
+          ? pool.filter((t) => types.includes(typeOf(t)))
+          : pool;
+
         body.innerHTML =
-          visible.map(taskRowHTML).join("") ||
+          shown.map(taskRowHTML).join("") ||
           `<div class="qtask-empty">Nothing to show.</div>`;
 
         body.querySelectorAll("[data-act='add']").forEach((btn) => {
@@ -832,21 +1614,84 @@
         body.querySelectorAll("[data-act='hide']").forEach((btn) => {
           btn.addEventListener("click", onHideClick);
         });
+
+        revealWidget();
       }
     );
   }
 
+  let filterMenuWired = false;
+
+  function closeFilterMenu() {
+    const menu = document.getElementById(FILTER_MENU_ID);
+    const gear = document.getElementById(FILTER_BTN_ID);
+    if (menu) menu.hidden = true;
+    if (gear) gear.setAttribute("aria-expanded", "false");
+  }
+
+  // Rebuilds the menu from the types actually present; returns the types in effect
+  function fillTypeFilter(tasks, wanted, hideAdded, addedCount) {
+    const counts = {};
+    tasks.forEach((t) => {
+      const k = typeOf(t);
+      counts[k] = (counts[k] || 0) + 1;
+    });
+
+    // Drop any saved type that has nothing left to show
+    const types = normalizeFilter(wanted).filter((k) => counts[k]);
+
+    const menu = document.getElementById(FILTER_MENU_ID);
+    if (!menu) return types;
+
+    // Counts belong only where they mean "how many of these exist". The hide
+    // toggle's number means something else, so it goes inside its label rather
+    // than sharing a column with numbers it cannot be compared against.
+    const row = (attrs, on, label, count) =>
+      `<button type="button" class="qt-filter-item" role="menuitemcheckbox" aria-checked="${on}" ${attrs}>` +
+      `${on ? BOX_CHECKED : BOX_EMPTY}<span>${escapeHtml(label)}</span>` +
+      (count == null ? "" : `<em>${count}</em>`) +
+      `</button>`;
+
+    const present = Object.keys(TYPE_META).filter((k) => counts[k]);
+
+    // No "All types" pseudo-option: nothing checked already means no filter,
+    // and resetting is an action rather than a state you can be filtered to.
+    menu.innerHTML =
+      `<div class="qt-menu-head"><span>Task types</span>` +
+      `<button type="button" class="qt-menu-clear"${
+        types.length ? "" : " disabled"
+      }>Clear</button></div>` +
+      present
+        .map((k) =>
+          row(`data-type="${k}"`, types.includes(k), TYPE_META[k].label, counts[k])
+        )
+        .join("") +
+      `<div class="qt-menu-head"><span>Options</span></div>` +
+      row(
+        `data-toggle="added"`,
+        !!hideAdded,
+        addedCount ? `Hide ${addedCount} already added` : "Hide already added",
+        null
+      );
+
+    const gear = document.getElementById(FILTER_BTN_ID);
+    if (gear) gear.classList.toggle("qt-active", types.length > 0 || !!hideAdded);
+
+    return types;
+  }
+
   function taskRowHTML(t) {
     const inTasks = !!t._in_google_tasks;
-    const isGrading = !!(t.isGrading || (t.assignment && t.assignment.startsWith("Grade: ")));
+    const type = typeOf(t);
+    const isGrading = type === "grading";
     return `
       <div class="qtask-row" data-key="${taskKey(t)}" data-href="${
       t.href || ""
-    }" data-grading="${isGrading ? "true" : "false"}">
+    }" data-type="${type}" data-grading="${isGrading ? "true" : "false"}">
         <div>
-          <div class="qtask-title"><a href="${t.href || "#"}">${escapeHtml(
-      t.assignment || "Untitled"
-    )}</a></div>
+          <div class="qtask-title">${typeIcon(type)}<a href="${
+      t.href || "#"
+    }">${escapeHtml(t.assignment || "Untitled")}</a></div>
           <div class="qtask-subtle">${escapeHtml(t.course || "")}${
       t.dueText ? " • " + escapeHtml(t.dueText) : ""
     }</div>
@@ -865,7 +1710,7 @@
 
   /* ---------------------- row handlers ---------------------- */
   async function onAddClick(e) {
-    const row = e.currentTarget.closest(".qtask-row");
+    const row = e.currentTarget.closest("[data-key]");
     if (!row) return;
     
     const isGrading = row.dataset.grading === "true";
@@ -1023,7 +1868,7 @@
   }
 
   async function onDeleteClick(e) {
-    const row = e.currentTarget.closest(".qtask-row");
+    const row = e.currentTarget.closest("[data-key]");
     if (!row) return;
     greyRowButtons(row, true);
 
@@ -1076,7 +1921,7 @@
   }
 
   async function onHideClick(e) {
-    const row = e.currentTarget.closest(".qtask-row");
+    const row = e.currentTarget.closest("[data-key]");
     if (!row) return;
     greyRowButtons(row, true);
 
@@ -1084,7 +1929,9 @@
       const key = row.dataset.key;
       const resp = await sendBg({ type: "ADD_BLACKLIST", assignment: key });
       if (resp && resp.ok) {
-        row.remove();
+        // Panel rows we own outright. A decorated Canvas row belongs to React,
+        // so leave it for the next decorate pass to hide.
+        if (row.classList.contains("qtask-row")) row.remove();
       } else {
         if (DEBUG) LOG("hide error", resp?.error || "Unknown error");
       }
@@ -1364,6 +2211,16 @@
       </div>
 
       <div class="qt-help-section">
+        <h5>Task types</h5>
+        <ul class="qt-help-list">
+          ${Object.keys(TYPE_META)
+            .map((k) => `<li>${typeIcon(k)}${TYPE_META[k].label}</li>`)
+            .join("")}
+        </ul>
+        <p>Use the gear menu in the QuackTask header to pick which types to show. Select as many as you like, or "All types" to clear. "Hide added to Tasks" drops anything already sitting in Google Tasks, so only what you have not triaged is left.</p>
+      </div>
+
+      <div class="qt-help-section">
         <h5>Tips</h5>
         <ul class="qt-help-list">
           <li>Make sure you're on the Canvas home page for assignments to load</li>
@@ -1380,18 +2237,56 @@
 
   /* ---------------------- observers ---------------------- */
   function watchForRerender() {
-    const obs = new MutationObserver(() => {
-      const parent = rightAside();
-      if (parent && !document.getElementById(WIDGET_ID) && onDashboard()) {
-        if (DEBUG) LOG("sidebar re-attaching after Canvas re-render");
-        mountShell(parent);
-        renderFromStorage();
-        // Tokens are applied in mountShell, but ensure they're applied here too
-        setTimeout(() => {
-          const sidebar = document.getElementById(WIDGET_ID);
-          if (sidebar) applyTokens(sidebar);
-        }, 100);
+    let pending = null;
+    const check = () => {
+      pending = null;
+      if (!onDashboard()) return;
+      const host = resolveHost();
+      if (!host) return;
+
+      // Re-resolve rather than just checking that we exist: at document_idle the
+      // new dashboard has not drawn its widgets yet, so the first mount can land
+      // in the wrong host and has to move once the real one appears.
+      // Same mode and still attached is enough. Comparing element identity
+      // remounts every time React reconciles the widget subtree, which reads
+      // as the panel blinking out and back in.
+      const widget = document.getElementById(WIDGET_ID);
+      if (widget && document.contains(widget) && HOST && HOST.mode === host.mode) {
+        // Keep the mount, but refresh the references React just replaced
+        HOST.el = host.el;
+        HOST.sample = host.sample;
+        // Canvas redraws its rows on every page turn and filter change
+        if (HOST.mode === "decorate") decorateCoursework();
+        else if (HOST.mode === "cards") decorateCourseCards();
+        return;
       }
+
+      if (DEBUG) LOG("sidebar mounting into", host.mode, host.el);
+      mountShell(host);
+      renderFromStorage();
+      // Tokens are applied in mountShell, but ensure they're applied here too
+      setTimeout(() => {
+        const sidebar = document.getElementById(WIDGET_ID);
+        if (sidebar) applyTokens(sidebar);
+      }, 100);
+    };
+
+    // The new dashboard is a React app that mutates constantly, so coalesce
+    // the callbacks instead of re-checking on every single mutation.
+    const obs = new MutationObserver((records) => {
+      // Canvas still drawing the host: hold the paint until it stops
+      if (!injecting) {
+        const scope = churnScope();
+        if (scope) {
+          for (const r of records) {
+            if (scope.contains(r.target)) {
+              lastChurnAt = performance.now();
+              break;
+            }
+          }
+        }
+      }
+      if (pending === null) pending = requestAnimationFrame(check);
     });
     obs.observe(document.body, { childList: true, subtree: true });
   }
@@ -1525,11 +2420,11 @@
   /* ---------------------- boot ---------------------- */
   function boot() {
     if (!onDashboard()) return;
-    const parent = rightAside();
-    if (!parent) return;
+    const host = resolveHost();
+    if (!host) return;
 
     PAGE_GATE_OPEN = false; // base state - prevents any flash of stale tasks
-    mountShell(parent);
+    mountShell(host);
     renderFromStorage();
 
     // Kick off a fresh sync - when it returns, open the page gate and render once
